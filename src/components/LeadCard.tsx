@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Paperclip, Phone, Mail, MapPin, User, CalendarDays, Check, X, Image as ImageIcon, FileAudio, FileVideo, FileText } from "lucide-react";
+import { Paperclip, Phone, Mail, MapPin, User, CalendarDays, Check, X, Image as ImageIcon, FileAudio, FileVideo, FileText, Lock, Clock } from "lucide-react";
 
 type Attachment = { name: string; type: string; url: string };
 
@@ -73,7 +73,22 @@ function FileButton({ onFiles }: { onFiles: (files: FileList) => void }) {
 function fmtDate(iso: string) {
   if (!iso) return "—";
   const d = new Date(iso);
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  return d.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtDuration(fromIso: string, toIso: string): string {
+  if (!fromIso || !toIso) return "";
+  const ms = new Date(toIso).getTime() - new Date(fromIso).getTime();
+  if (!isFinite(ms) || ms <= 0) return "same moment";
+  const mins = Math.floor(ms / 60000);
+  const days = Math.floor(mins / (60 * 24));
+  const hours = Math.floor((mins % (60 * 24)) / 60);
+  const m = mins % 60;
+  const parts: string[] = [];
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (!days && m) parts.push(`${m}m`);
+  return parts.join(" ") || "<1m";
 }
 
 function stageTone(stage: string): string {
@@ -84,12 +99,16 @@ function stageTone(stage: string): string {
   return "bg-sky-500/15 text-sky-300 border-sky-500/30";
 }
 
-export function LeadCard({ lead, index }: { lead: Lead; index: number }) {
+export function LeadCard({ lead, index, canSeeOriginal }: { lead: Lead; index: number; canSeeOriginal: boolean }) {
   const [state, setState] = useState<State>({
-    firstOutreachDate: lead.createdAt,
+    firstOutreachDate: canSeeOriginal ? lead.createdAt : "",
     firstOutreachMedium: "WhatsApp",
     firstOutreachAttachments: [],
-    followUps: lead.followUps.map((f) => ({ date: f.date, comment: f.comment, attachments: [] })),
+    followUps: lead.followUps.map((f) => ({
+      date: canSeeOriginal ? f.date : "",
+      comment: canSeeOriginal ? f.comment : "",
+      attachments: [],
+    })),
   });
   const [saved, setSaved] = useState(false);
 
@@ -99,7 +118,7 @@ export function LeadCard({ lead, index }: { lead: Lead; index: number }) {
 
   const timeline = useMemo(() => {
     const items: { label: string; date: string; comment?: string; attachments: Attachment[]; tone: string }[] = [
-      { label: "Lead created", date: lead.createdAt, comment: lead.remarks, attachments: [], tone: "primary" },
+      { label: "Lead created", date: lead.createdAt, comment: canSeeOriginal ? lead.remarks : undefined, attachments: [], tone: "primary" },
     ];
     if (state.firstOutreachDate) {
       items.push({
@@ -117,17 +136,23 @@ export function LeadCard({ lead, index }: { lead: Lead; index: number }) {
     return items
       .filter((x) => x.date)
       .sort((a, b) => (a.date < b.date ? -1 : 1));
-  }, [state, lead.createdAt, lead.remarks]);
+  }, [state, lead.createdAt, lead.remarks, canSeeOriginal]);
+
+  // Submit gating: any field with values but no attachments is invalid.
+  const firstOutreachInvalid = (!!state.firstOutreachDate) && state.firstOutreachAttachments.length === 0;
+  const fuInvalid = state.followUps.map((f) => (f.date || f.comment) && f.attachments.length === 0);
+  const canSubmit = !firstOutreachInvalid && !fuInvalid.some(Boolean);
 
   return (
     <section className="glass relative overflow-hidden rounded-3xl border border-border/70 shadow-2xl shadow-black/40">
-      {/* Hidden fields containing source follow-up details */}
+      {/* Hidden fields with original source data — present in the DOM but never rendered visually for non-india users. */}
       {lead.followUps.map((f, i) => (
         <span key={`hidden-${i}`}>
           <input type="hidden" name={`lead-${lead.id}-followup-${i + 1}-date`} value={f.date} />
           <input type="hidden" name={`lead-${lead.id}-followup-${i + 1}-comment`} value={f.comment} />
         </span>
       ))}
+      <input type="hidden" name={`lead-${lead.id}-remarks`} value={lead.remarks} />
       <input type="hidden" name={`lead-${lead.id}-id`} value={lead.id} />
       <input type="hidden" name={`lead-${lead.id}-source-id`} value={lead.sourceId} />
       <input type="hidden" name={`lead-${lead.id}-host-id`} value={lead.hostId} />
@@ -153,12 +178,20 @@ export function LeadCard({ lead, index }: { lead: Lead; index: number }) {
         <div className="flex flex-col items-end gap-2">
           <Badge className={`border ${stageTone(lead.stageName)} font-medium`}>{lead.stageName}</Badge>
           <span className="text-[11px] uppercase tracking-widest text-muted-foreground">{lead.sourceName} · {lead.classType}</span>
+          <span className="text-[11px] uppercase tracking-widest text-muted-foreground">{lead.status} · {lead.channel}</span>
         </div>
       </header>
 
       <div className="grid gap-8 px-6 py-7 sm:px-8 lg:grid-cols-[1.4fr_1fr]">
         {/* Form */}
         <div className="space-y-6">
+          {canSeeOriginal && lead.remarks && (
+            <div className="rounded-2xl border border-border/60 bg-secondary/40 p-4 text-sm leading-relaxed text-muted-foreground">
+              <div className="mb-1.5 text-[10px] uppercase tracking-widest text-muted-foreground/80">Original remarks</div>
+              <p className="text-foreground/90">{lead.remarks}</p>
+            </div>
+          )}
+
           {/* First outreach */}
           <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5">
             <div className="mb-4 flex items-center justify-between">
@@ -167,17 +200,22 @@ export function LeadCard({ lead, index }: { lead: Lead; index: number }) {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Date sent</Label>
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Date &amp; time sent</Label>
                 <Input
-                  type="date"
+                  type="datetime-local"
                   value={state.firstOutreachDate}
                   onChange={(e) => setState((s) => ({ ...s, firstOutreachDate: e.target.value }))}
+                  disabled={state.firstOutreachAttachments.length === 0}
                   className="bg-background/60"
                 />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Medium</Label>
-                <Select value={state.firstOutreachMedium} onValueChange={(v) => setState((s) => ({ ...s, firstOutreachMedium: v }))}>
+                <Select
+                  value={state.firstOutreachMedium}
+                  onValueChange={(v) => setState((s) => ({ ...s, firstOutreachMedium: v }))}
+                  disabled={state.firstOutreachAttachments.length === 0}
+                >
                   <SelectTrigger className="bg-background/60"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {MEDIUMS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
@@ -197,16 +235,23 @@ export function LeadCard({ lead, index }: { lead: Lead; index: number }) {
                   onRemove={() => setState((s) => ({ ...s, firstOutreachAttachments: s.firstOutreachAttachments.filter((_, j) => j !== i) }))}
                 />
               ))}
+              {state.firstOutreachAttachments.length === 0 && (
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <Lock className="size-3" /> Attach evidence to enable this entry
+                </span>
+              )}
             </div>
           </div>
 
           {/* Follow-ups */}
           <div className="grid gap-4 sm:grid-cols-2">
-            {state.followUps.map((f, i) => (
+            {state.followUps.map((f, i) => {
+              const locked = f.attachments.length === 0;
+              return (
               <div key={i} className="rounded-2xl border border-border/70 bg-background/40 p-4 transition hover:border-primary/40">
                 <div className="mb-3 flex items-center justify-between">
                   <h4 className="text-sm font-semibold tracking-wide text-foreground">Follow-up {i + 1}</h4>
-                  {lead.followUps[i].date && (
+                  {canSeeOriginal && lead.followUps[i].date && (
                     <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
                       Original: {fmtDate(lead.followUps[i].date)}
                     </span>
@@ -214,15 +259,22 @@ export function LeadCard({ lead, index }: { lead: Lead; index: number }) {
                 </div>
                 <div className="space-y-3">
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Date</Label>
-                    <Input type="date" value={f.date} onChange={(e) => updateFU(i, { date: e.target.value })} className="bg-background/60" />
+                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Date &amp; time</Label>
+                    <Input
+                      type="datetime-local"
+                      value={f.date}
+                      disabled={locked}
+                      onChange={(e) => updateFU(i, { date: e.target.value })}
+                      className="bg-background/60"
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Comment</Label>
                     <Textarea
                       value={f.comment}
+                      disabled={locked}
                       onChange={(e) => updateFU(i, { comment: e.target.value })}
-                      placeholder="What happened on this touchpoint?"
+                      placeholder="A brief note on this touchpoint."
                       rows={3}
                       className="resize-none bg-background/60"
                     />
@@ -232,13 +284,23 @@ export function LeadCard({ lead, index }: { lead: Lead; index: number }) {
                     {f.attachments.map((a, j) => (
                       <AttachmentChip key={j} a={a} onRemove={() => updateFU(i, { attachments: f.attachments.filter((_, k) => k !== j) })} />
                     ))}
+                    {locked && (
+                      <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <Lock className="size-3" /> Evidence required
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
-            ))}
+            );})}
           </div>
 
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {!canSubmit && (
+              <span className="text-xs text-muted-foreground">
+                Clear any fields without evidence, or attach a file to submit.
+              </span>
+            )}
             {saved && (
               <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400">
                 <Check className="size-4" /> Saved locally
@@ -246,6 +308,7 @@ export function LeadCard({ lead, index }: { lead: Lead; index: number }) {
             )}
             <Button
               type="button"
+              disabled={!canSubmit}
               onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 2000); }}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
@@ -261,11 +324,18 @@ export function LeadCard({ lead, index }: { lead: Lead; index: number }) {
             <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{timeline.length} events</span>
           </div>
           <ol className="relative space-y-5 border-l border-border/70 pl-5">
-            {timeline.map((t, i) => (
+            {timeline.map((t, i) => {
+              const gap = i > 0 ? fmtDuration(timeline[i - 1].date, t.date) : "";
+              return (
               <li key={i} className="relative">
                 <span className={`absolute -left-[27px] top-1.5 size-3 rounded-full ring-4 ring-background ${
                   t.tone === "primary" ? "bg-primary" : t.tone === "accent" ? "bg-accent" : "bg-muted-foreground"
                 }`} />
+                {gap && (
+                  <div className="mb-1.5 inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground/80">
+                    <Clock className="size-3" /> {gap} later
+                  </div>
+                )}
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="text-sm font-medium text-foreground">{t.label}</span>
                   <time className="shrink-0 text-[11px] uppercase tracking-wider text-muted-foreground">{fmtDate(t.date)}</time>
@@ -281,9 +351,9 @@ export function LeadCard({ lead, index }: { lead: Lead; index: number }) {
                   </div>
                 )}
               </li>
-            ))}
+            );})}
             {timeline.length === 0 && (
-              <li className="text-sm text-muted-foreground">No events yet — fill in the form to build the timeline.</li>
+              <li className="text-sm text-muted-foreground">The timeline will assemble as evidence is added.</li>
             )}
           </ol>
         </aside>
