@@ -1,43 +1,75 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Lead } from "@/data/leads";
+import {
+  loadLeadResponse,
+  saveLeadResponse,
+  type LeadResponseState,
+  type PersistedAttachment,
+} from "@/lib/lead-responses";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Paperclip, Phone, Mail, MapPin, User, CalendarDays, Check, X, Image as ImageIcon, FileAudio, FileVideo, FileText, Lock, Clock } from "lucide-react";
-
-type Attachment = { name: string; type: string; url: string };
-
-type FieldState = {
-  date: string;
-  comment: string;
-  attachments: Attachment[];
-};
-
-type State = {
-  firstOutreachDate: string;
-  firstOutreachMedium: string;
-  firstOutreachAttachments: Attachment[];
-  followUps: FieldState[];
-};
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Paperclip,
+  Phone,
+  Mail,
+  MapPin,
+  User,
+  CalendarDays,
+  Check,
+  X,
+  Image as ImageIcon,
+  FileAudio,
+  FileVideo,
+  FileText,
+  Lock,
+  Clock,
+} from "lucide-react";
 
 const MEDIUMS = ["WhatsApp", "Phone Call", "Email", "SMS", "Instagram DM", "In-person"];
 
-function fileToAttachment(f: File): Attachment {
-  return { name: f.name, type: f.type || "application/octet-stream", url: URL.createObjectURL(f) };
+function fileToAttachment(f: File): PersistedAttachment {
+  return {
+    name: f.name,
+    type: f.type || "application/octet-stream",
+    size: f.size,
+    url: URL.createObjectURL(f),
+    file: f,
+  };
 }
 
-function AttachmentChip({ a, onRemove }: { a: Attachment; onRemove: () => void }) {
-  const Icon = a.type.startsWith("image/") ? ImageIcon : a.type.startsWith("audio/") ? FileAudio : a.type.startsWith("video/") ? FileVideo : FileText;
+function AttachmentChip({ a, onRemove }: { a: PersistedAttachment; onRemove: () => void }) {
+  const Icon = a.type.startsWith("image/")
+    ? ImageIcon
+    : a.type.startsWith("audio/")
+      ? FileAudio
+      : a.type.startsWith("video/")
+        ? FileVideo
+        : FileText;
   return (
-    <a href={a.url} target="_blank" rel="noreferrer" className="group inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary/60 px-2.5 py-1 text-xs text-foreground/90 hover:border-primary/60 transition">
+    <a
+      href={a.url}
+      target="_blank"
+      rel="noreferrer"
+      className="group inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary/60 px-2.5 py-1 text-xs text-foreground/90 hover:border-primary/60 transition"
+    >
       <Icon className="size-3.5 text-primary" />
       <span className="max-w-[140px] truncate">{a.name}</span>
       <button
         type="button"
-        onClick={(e) => { e.preventDefault(); onRemove(); }}
+        onClick={(e) => {
+          e.preventDefault();
+          onRemove();
+        }}
         className="ml-0.5 rounded-full p-0.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
         aria-label="Remove attachment"
       >
@@ -73,7 +105,13 @@ function FileButton({ onFiles }: { onFiles: (files: FileList) => void }) {
 function fmtDate(iso: string) {
   if (!iso) return "—";
   const d = new Date(iso);
-  return d.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function fmtDuration(fromIso: string, toIso: string): string {
@@ -93,14 +131,25 @@ function fmtDuration(fromIso: string, toIso: string): string {
 
 function stageTone(stage: string): string {
   const s = stage.toLowerCase();
-  if (s.includes("trial completed")) return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
-  if (s.includes("not interested") || s.includes("lost")) return "bg-rose-500/15 text-rose-300 border-rose-500/30";
-  if (s.includes("unresponsive") || s.includes("did not answer")) return "bg-amber-500/15 text-amber-300 border-amber-500/30";
+  if (s.includes("trial completed"))
+    return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+  if (s.includes("not interested") || s.includes("lost"))
+    return "bg-rose-500/15 text-rose-300 border-rose-500/30";
+  if (s.includes("unresponsive") || s.includes("did not answer"))
+    return "bg-amber-500/15 text-amber-300 border-amber-500/30";
   return "bg-sky-500/15 text-sky-300 border-sky-500/30";
 }
 
-export function LeadCard({ lead, index, canSeeOriginal }: { lead: Lead; index: number; canSeeOriginal: boolean }) {
-  const [state, setState] = useState<State>({
+export function LeadCard({
+  lead,
+  index,
+  canSeeOriginal,
+}: {
+  lead: Lead;
+  index: number;
+  canSeeOriginal: boolean;
+}) {
+  const [state, setState] = useState<LeadResponseState>({
     firstOutreachDate: canSeeOriginal ? lead.createdAt : "",
     firstOutreachMedium: "WhatsApp",
     firstOutreachAttachments: [],
@@ -111,14 +160,70 @@ export function LeadCard({ lead, index, canSeeOriginal }: { lead: Lead; index: n
     })),
   });
   const [saved, setSaved] = useState(false);
+  const [loadingResponse, setLoadingResponse] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const updateFU = (i: number, patch: Partial<FieldState>) => {
-    setState((s) => ({ ...s, followUps: s.followUps.map((f, j) => (j === i ? { ...f, ...patch } : f)) }));
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingResponse(true);
+    setError(null);
+    loadLeadResponse(lead)
+      .then((loaded) => {
+        if (!cancelled && loaded) setState(loaded);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error(err);
+          setError("Saved response could not be loaded.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingResponse(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lead]);
+
+  const updateFU = (i: number, patch: Partial<LeadResponseState["followUps"][number]>) => {
+    setState((s) => ({
+      ...s,
+      followUps: s.followUps.map((f, j) => (j === i ? { ...f, ...patch } : f)),
+    }));
+  };
+
+  const persist = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const nextState = await saveLeadResponse(lead, state);
+      setState(nextState);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Response could not be saved.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const timeline = useMemo(() => {
-    const items: { label: string; date: string; comment?: string; attachments: Attachment[]; tone: string }[] = [
-      { label: "Lead created", date: lead.createdAt, comment: canSeeOriginal ? lead.remarks : undefined, attachments: [], tone: "primary" },
+    const items: {
+      label: string;
+      date: string;
+      comment?: string;
+      attachments: PersistedAttachment[];
+      tone: string;
+    }[] = [
+      {
+        label: "Lead created",
+        date: lead.createdAt,
+        comment: canSeeOriginal ? lead.remarks : undefined,
+        attachments: [],
+        tone: "primary",
+      },
     ];
     if (state.firstOutreachDate) {
       items.push({
@@ -130,16 +235,21 @@ export function LeadCard({ lead, index, canSeeOriginal }: { lead: Lead; index: n
     }
     state.followUps.forEach((f, i) => {
       if (f.date || f.comment) {
-        items.push({ label: `Follow-up ${i + 1}`, date: f.date, comment: f.comment, attachments: f.attachments, tone: "muted" });
+        items.push({
+          label: `Follow-up ${i + 1}`,
+          date: f.date,
+          comment: f.comment,
+          attachments: f.attachments,
+          tone: "muted",
+        });
       }
     });
-    return items
-      .filter((x) => x.date)
-      .sort((a, b) => (a.date < b.date ? -1 : 1));
+    return items.filter((x) => x.date).sort((a, b) => (a.date < b.date ? -1 : 1));
   }, [state, lead.createdAt, lead.remarks, canSeeOriginal]);
 
   // Submit gating: any field with values but no attachments is invalid.
-  const firstOutreachInvalid = (!!state.firstOutreachDate) && state.firstOutreachAttachments.length === 0;
+  const firstOutreachInvalid =
+    !!state.firstOutreachDate && state.firstOutreachAttachments.length === 0;
   const fuInvalid = state.followUps.map((f) => (f.date || f.comment) && f.attachments.length === 0);
   const canSubmit = !firstOutreachInvalid && !fuInvalid.some(Boolean);
 
@@ -149,7 +259,11 @@ export function LeadCard({ lead, index, canSeeOriginal }: { lead: Lead; index: n
       {lead.followUps.map((f, i) => (
         <span key={`hidden-${i}`}>
           <input type="hidden" name={`lead-${lead.id}-followup-${i + 1}-date`} value={f.date} />
-          <input type="hidden" name={`lead-${lead.id}-followup-${i + 1}-comment`} value={f.comment} />
+          <input
+            type="hidden"
+            name={`lead-${lead.id}-followup-${i + 1}-comment`}
+            value={f.comment}
+          />
         </span>
       ))}
       <input type="hidden" name={`lead-${lead.id}-remarks`} value={lead.remarks} />
@@ -167,18 +281,36 @@ export function LeadCard({ lead, index, canSeeOriginal }: { lead: Lead; index: n
           <div>
             <h2 className="text-2xl sm:text-3xl text-foreground">{lead.fullName}</h2>
             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5"><Phone className="size-3" /> {lead.phone}</span>
-              {lead.email !== "-" && <span className="inline-flex items-center gap-1.5"><Mail className="size-3" /> {lead.email}</span>}
-              <span className="inline-flex items-center gap-1.5"><MapPin className="size-3" /> {lead.center}</span>
-              <span className="inline-flex items-center gap-1.5"><User className="size-3" /> {lead.associate}</span>
-              <span className="inline-flex items-center gap-1.5"><CalendarDays className="size-3" /> Created {fmtDate(lead.createdAt)}</span>
+              <span className="inline-flex items-center gap-1.5">
+                <Phone className="size-3" /> {lead.phone}
+              </span>
+              {lead.email !== "-" && (
+                <span className="inline-flex items-center gap-1.5">
+                  <Mail className="size-3" /> {lead.email}
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1.5">
+                <MapPin className="size-3" /> {lead.center}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <User className="size-3" /> {lead.associate}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <CalendarDays className="size-3" /> Created {fmtDate(lead.createdAt)}
+              </span>
             </div>
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <Badge className={`border ${stageTone(lead.stageName)} font-medium`}>{lead.stageName}</Badge>
-          <span className="text-[11px] uppercase tracking-widest text-muted-foreground">{lead.sourceName} · {lead.classType}</span>
-          <span className="text-[11px] uppercase tracking-widest text-muted-foreground">{lead.status} · {lead.channel}</span>
+          <Badge className={`border ${stageTone(lead.stageName)} font-medium`}>
+            {lead.stageName}
+          </Badge>
+          <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
+            {lead.sourceName} · {lead.classType}
+          </span>
+          <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
+            {lead.status} · {lead.channel}
+          </span>
         </div>
       </header>
 
@@ -187,7 +319,9 @@ export function LeadCard({ lead, index, canSeeOriginal }: { lead: Lead; index: n
         <div className="space-y-6">
           {canSeeOriginal && lead.remarks && (
             <div className="rounded-2xl border border-border/60 bg-secondary/40 p-4 text-sm leading-relaxed text-muted-foreground">
-              <div className="mb-1.5 text-[10px] uppercase tracking-widest text-muted-foreground/80">Original remarks</div>
+              <div className="mb-1.5 text-[10px] uppercase tracking-widest text-muted-foreground/80">
+                Original remarks
+              </div>
               <p className="text-foreground/90">{lead.remarks}</p>
             </div>
           )}
@@ -196,11 +330,15 @@ export function LeadCard({ lead, index, canSeeOriginal }: { lead: Lead; index: n
           <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg text-foreground">First outreach</h3>
-              <span className="text-[10px] uppercase tracking-widest text-primary">Origin event</span>
+              <span className="text-[10px] uppercase tracking-widest text-primary">
+                Origin event
+              </span>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Date &amp; time sent</Label>
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Date &amp; time sent
+                </Label>
                 <Input
                   type="datetime-local"
                   value={state.firstOutreachDate}
@@ -210,29 +348,51 @@ export function LeadCard({ lead, index, canSeeOriginal }: { lead: Lead; index: n
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Medium</Label>
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Medium
+                </Label>
                 <Select
                   value={state.firstOutreachMedium}
                   onValueChange={(v) => setState((s) => ({ ...s, firstOutreachMedium: v }))}
                   disabled={state.firstOutreachAttachments.length === 0}
                 >
-                  <SelectTrigger className="bg-background/60"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="bg-background/60">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
-                    {MEDIUMS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                    {MEDIUMS.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {m}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <FileButton onFiles={(files) => setState((s) => ({
-                ...s,
-                firstOutreachAttachments: [...s.firstOutreachAttachments, ...Array.from(files).map(fileToAttachment)],
-              }))} />
+              <FileButton
+                onFiles={(files) =>
+                  setState((s) => ({
+                    ...s,
+                    firstOutreachAttachments: [
+                      ...s.firstOutreachAttachments,
+                      ...Array.from(files).map(fileToAttachment),
+                    ],
+                  }))
+                }
+              />
               {state.firstOutreachAttachments.map((a, i) => (
                 <AttachmentChip
                   key={i}
                   a={a}
-                  onRemove={() => setState((s) => ({ ...s, firstOutreachAttachments: s.firstOutreachAttachments.filter((_, j) => j !== i) }))}
+                  onRemove={() =>
+                    setState((s) => ({
+                      ...s,
+                      firstOutreachAttachments: s.firstOutreachAttachments.filter(
+                        (_, j) => j !== i,
+                      ),
+                    }))
+                  }
                 />
               ))}
               {state.firstOutreachAttachments.length === 0 && (
@@ -248,71 +408,100 @@ export function LeadCard({ lead, index, canSeeOriginal }: { lead: Lead; index: n
             {state.followUps.map((f, i) => {
               const locked = f.attachments.length === 0;
               return (
-              <div key={i} className="rounded-2xl border border-border/70 bg-background/40 p-4 transition hover:border-primary/40">
-                <div className="mb-3 flex items-center justify-between">
-                  <h4 className="text-sm font-semibold tracking-wide text-foreground">Follow-up {i + 1}</h4>
-                  {canSeeOriginal && lead.followUps[i].date && (
-                    <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                      Original: {fmtDate(lead.followUps[i].date)}
-                    </span>
-                  )}
-                </div>
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Date &amp; time</Label>
-                    <Input
-                      type="datetime-local"
-                      value={f.date}
-                      disabled={locked}
-                      onChange={(e) => updateFU(i, { date: e.target.value })}
-                      className="bg-background/60"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Comment</Label>
-                    <Textarea
-                      value={f.comment}
-                      disabled={locked}
-                      onChange={(e) => updateFU(i, { comment: e.target.value })}
-                      placeholder="A brief note on this touchpoint."
-                      rows={3}
-                      className="resize-none bg-background/60"
-                    />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <FileButton onFiles={(files) => updateFU(i, { attachments: [...f.attachments, ...Array.from(files).map(fileToAttachment)] })} />
-                    {f.attachments.map((a, j) => (
-                      <AttachmentChip key={j} a={a} onRemove={() => updateFU(i, { attachments: f.attachments.filter((_, k) => k !== j) })} />
-                    ))}
-                    {locked && (
-                      <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                        <Lock className="size-3" /> Evidence required
+                <div
+                  key={i}
+                  className="rounded-2xl border border-border/70 bg-background/40 p-4 transition hover:border-primary/40"
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <h4 className="text-sm font-semibold tracking-wide text-foreground">
+                      Follow-up {i + 1}
+                    </h4>
+                    {canSeeOriginal && lead.followUps[i].date && (
+                      <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                        Original: {fmtDate(lead.followUps[i].date)}
                       </span>
                     )}
                   </div>
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                        Date &amp; time
+                      </Label>
+                      <Input
+                        type="datetime-local"
+                        value={f.date}
+                        disabled={locked}
+                        onChange={(e) => updateFU(i, { date: e.target.value })}
+                        className="bg-background/60"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                        Comment
+                      </Label>
+                      <Textarea
+                        value={f.comment}
+                        disabled={locked}
+                        onChange={(e) => updateFU(i, { comment: e.target.value })}
+                        placeholder="A brief note on this touchpoint."
+                        rows={3}
+                        className="resize-none bg-background/60"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <FileButton
+                        onFiles={(files) =>
+                          updateFU(i, {
+                            attachments: [
+                              ...f.attachments,
+                              ...Array.from(files).map(fileToAttachment),
+                            ],
+                          })
+                        }
+                      />
+                      {f.attachments.map((a, j) => (
+                        <AttachmentChip
+                          key={j}
+                          a={a}
+                          onRemove={() =>
+                            updateFU(i, { attachments: f.attachments.filter((_, k) => k !== j) })
+                          }
+                        />
+                      ))}
+                      {locked && (
+                        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <Lock className="size-3" /> Evidence required
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            );})}
+              );
+            })}
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-3">
+            {loadingResponse && (
+              <span className="text-xs text-muted-foreground">Loading saved response…</span>
+            )}
             {!canSubmit && (
               <span className="text-xs text-muted-foreground">
                 Clear any fields without evidence, or attach a file to submit.
               </span>
             )}
+            {error && <span className="text-xs text-destructive">{error}</span>}
             {saved && (
               <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400">
-                <Check className="size-4" /> Saved locally
+                <Check className="size-4" /> Saved to Supabase
               </span>
             )}
             <Button
               type="button"
-              disabled={!canSubmit}
-              onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 2000); }}
+              disabled={!canSubmit || saving || loadingResponse}
+              onClick={persist}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
-              Save section
+              {saving ? "Saving…" : "Save section"}
             </Button>
           </div>
         </div>
@@ -321,39 +510,63 @@ export function LeadCard({ lead, index, canSeeOriginal }: { lead: Lead; index: n
         <aside className="lg:border-l lg:border-border/60 lg:pl-7">
           <div className="mb-4 flex items-baseline justify-between">
             <h3 className="text-lg text-foreground">Outreach timeline</h3>
-            <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{timeline.length} events</span>
+            <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              {timeline.length} events
+            </span>
           </div>
           <ol className="relative space-y-5 border-l border-border/70 pl-5">
             {timeline.map((t, i) => {
               const gap = i > 0 ? fmtDuration(timeline[i - 1].date, t.date) : "";
               return (
-              <li key={i} className="relative">
-                <span className={`absolute -left-[27px] top-1.5 size-3 rounded-full ring-4 ring-background ${
-                  t.tone === "primary" ? "bg-primary" : t.tone === "accent" ? "bg-accent" : "bg-muted-foreground"
-                }`} />
-                {gap && (
-                  <div className="mb-1.5 inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground/80">
-                    <Clock className="size-3" /> {gap} later
+                <li key={i} className="relative">
+                  <span
+                    className={`absolute -left-[27px] top-1.5 size-3 rounded-full ring-4 ring-background ${
+                      t.tone === "primary"
+                        ? "bg-primary"
+                        : t.tone === "accent"
+                          ? "bg-accent"
+                          : "bg-muted-foreground"
+                    }`}
+                  />
+                  {gap && (
+                    <div className="mb-1.5 inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-muted-foreground/80">
+                      <Clock className="size-3" /> {gap} later
+                    </div>
+                  )}
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm font-medium text-foreground">{t.label}</span>
+                    <time className="shrink-0 text-[11px] uppercase tracking-wider text-muted-foreground">
+                      {fmtDate(t.date)}
+                    </time>
                   </div>
-                )}
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-sm font-medium text-foreground">{t.label}</span>
-                  <time className="shrink-0 text-[11px] uppercase tracking-wider text-muted-foreground">{fmtDate(t.date)}</time>
-                </div>
-                {t.comment && <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{t.comment}</p>}
-                {t.attachments.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {t.attachments.map((a, j) => (
-                      <a key={j} href={a.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-md bg-secondary/70 px-2 py-0.5 text-[11px] text-foreground/80 hover:text-primary">
-                        <Paperclip className="size-3" /> {a.name.length > 18 ? a.name.slice(0, 18) + "…" : a.name}
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </li>
-            );})}
+                  {t.comment && (
+                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                      {t.comment}
+                    </p>
+                  )}
+                  {t.attachments.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {t.attachments.map((a, j) => (
+                        <a
+                          key={j}
+                          href={a.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-md bg-secondary/70 px-2 py-0.5 text-[11px] text-foreground/80 hover:text-primary"
+                        >
+                          <Paperclip className="size-3" />{" "}
+                          {a.name.length > 18 ? a.name.slice(0, 18) + "…" : a.name}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
             {timeline.length === 0 && (
-              <li className="text-sm text-muted-foreground">The timeline will assemble as evidence is added.</li>
+              <li className="text-sm text-muted-foreground">
+                The timeline will assemble as evidence is added.
+              </li>
             )}
           </ol>
         </aside>

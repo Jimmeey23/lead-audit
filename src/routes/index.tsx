@@ -1,20 +1,27 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { LEADS, visibilityFor } from "@/data/leads";
 import { LeadCard } from "@/components/LeadCard";
 import { Input } from "@/components/ui/input";
-import { Search, Sparkles, LogOut } from "lucide-react";
+import { Search, Sparkles, LogOut, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { isCurrentUserAdmin } from "@/lib/lead-responses";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Outreach Audit — Lead Follow-up Validator" },
-      { name: "description", content: "Validate, correct and timeline every outreach with evidence attachments." },
+      {
+        name: "description",
+        content: "Validate, correct and timeline every outreach with evidence attachments.",
+      },
       { property: "og:title", content: "Outreach Audit — Lead Follow-up Validator" },
-      { property: "og:description", content: "Validate, correct and timeline every outreach with evidence attachments." },
+      {
+        property: "og:description",
+        content: "Validate, correct and timeline every outreach with evidence attachments.",
+      },
     ],
   }),
   component: Index,
@@ -30,9 +37,20 @@ function Index() {
 
   const [q, setQ] = useState("");
   const [center, setCenter] = useState<string>("All");
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const email = auth.user?.email ?? null;
   const visibility = useMemo(() => visibilityFor(email), [email]);
+
+  useEffect(() => {
+    let cancelled = false;
+    isCurrentUserAdmin(email).then((admin) => {
+      if (!cancelled) setIsAdmin(admin);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [email]);
 
   const visibleLeads = useMemo(() => {
     if (!visibility) return [];
@@ -40,7 +58,10 @@ function Index() {
     return LEADS.filter((l) => (visibility.centers as string[]).includes(l.center));
   }, [visibility]);
 
-  const centers = useMemo(() => ["All", ...Array.from(new Set(visibleLeads.map((l) => l.center)))], [visibleLeads]);
+  const centers = useMemo(
+    () => ["All", ...Array.from(new Set(visibleLeads.map((l) => l.center)))],
+    [visibleLeads],
+  );
 
   const filtered = useMemo(() => {
     const needle = q.toLowerCase().trim();
@@ -58,7 +79,11 @@ function Index() {
   }, [q, center, visibleLeads]);
 
   if (auth.status === "loading" || auth.status === "signed-out") {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Loading…</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+        Loading…
+      </div>
+    );
   }
 
   if (!visibility) {
@@ -69,7 +94,9 @@ function Index() {
           <p className="mt-2 text-sm text-muted-foreground">
             Signed in as {email}. Access is limited to Physique 57 studio emails.
           </p>
-          <Button onClick={() => auth.signOut()} className="mt-5">Sign out</Button>
+          <Button onClick={() => auth.signOut()} className="mt-5">
+            Sign out
+          </Button>
         </div>
       </div>
     );
@@ -85,7 +112,19 @@ function Index() {
             </div>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
               <span>{email}</span>
-              <Button variant="ghost" size="sm" onClick={() => auth.signOut()} className="h-8 gap-1.5 text-xs">
+              {isAdmin && (
+                <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+                  <Link to="/admin">
+                    <ShieldCheck className="size-3.5" /> Admin dashboard
+                  </Link>
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => auth.signOut()}
+                className="h-8 gap-1.5 text-xs"
+              >
                 <LogOut className="size-3.5" /> Sign out
               </Button>
             </div>
@@ -95,8 +134,9 @@ function Index() {
             <br className="hidden sm:block" /> backed by the receipts that confirm it.
           </h1>
           <p className="mt-5 max-w-2xl text-base text-muted-foreground">
-            Each lead is a self-contained worksheet. Attach a screenshot, recording, or note to unlock the
-            date and comment for that touchpoint, and the timeline assembles itself from the moments you confirm.
+            Each lead is a self-contained worksheet. Attach a screenshot, recording, or note to
+            unlock the date and comment for that touchpoint, and the timeline assembles itself from
+            the moments you confirm.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -134,7 +174,12 @@ function Index() {
 
       <main className="mx-auto mt-10 max-w-6xl space-y-8 px-6 sm:px-10">
         {filtered.map((lead, i) => (
-          <LeadCard key={lead.id} lead={lead} index={i} canSeeOriginal={visibility.canSeeOriginalData} />
+          <LeadCard
+            key={lead.id}
+            lead={lead}
+            index={i}
+            canSeeOriginal={visibility.canSeeOriginalData}
+          />
         ))}
         {filtered.length === 0 && (
           <div className="rounded-2xl border border-dashed border-border/60 p-16 text-center text-muted-foreground">
