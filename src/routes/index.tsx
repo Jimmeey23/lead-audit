@@ -40,6 +40,7 @@ function Index() {
   const [admin, setAdmin] = useState<"checking" | "yes" | "no">("checking");
   const [submittedLeadIds, setSubmittedLeadIds] = useState<Set<string>>(new Set());
   const [loadingSubmitted, setLoadingSubmitted] = useState(false);
+  const [submittedError, setSubmittedError] = useState<string | null>(null);
 
   const email = auth.user?.email ?? null;
   const isAdmin = admin === "yes";
@@ -65,13 +66,21 @@ function Index() {
     if (auth.status !== "signed-in" || !visibility) return;
 
     setLoadingSubmitted(true);
+    setSubmittedError(null);
     loadSubmittedLeadIds()
       .then((ids) => {
         if (!cancelled) setSubmittedLeadIds(ids);
       })
       .catch((err) => {
         console.error(err);
-        if (!cancelled) setSubmittedLeadIds(new Set());
+        if (!cancelled) {
+          setSubmittedLeadIds(new Set());
+          setSubmittedError(
+            err instanceof Error
+              ? err.message
+              : "Submitted rows could not be checked. Run the latest Supabase SQL script.",
+          );
+        }
       })
       .finally(() => {
         if (!cancelled) setLoadingSubmitted(false);
@@ -205,6 +214,11 @@ function Index() {
                 : `${filtered.length} of ${visibleLeads.length} open leads`}
             </span>
           </div>
+          {submittedError && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {submittedError}
+            </div>
+          )}
         </div>
       </header>
 

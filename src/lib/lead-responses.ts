@@ -186,8 +186,23 @@ export async function loadLeadResponse(lead: Lead): Promise<LeadResponseState | 
 
 export async function loadSubmittedLeadIds(): Promise<Set<string>> {
   const { data, error } = await supabase.rpc("submitted_lead_ids");
-  if (error) throw error;
-  return new Set((data ?? []).map((response) => response.lead_id));
+  if (!error) return new Set((data ?? []).map((response) => response.lead_id));
+
+  const { data: fallbackData, error: fallbackError } = await supabase
+    .from("lead_responses")
+    .select("lead_id,status")
+    .in("status", ["submitted", "reviewed"]);
+
+  if (fallbackError) {
+    throw new Error(
+      supabaseErrorMessage(
+        "Submitted rows could not be checked. Run the latest Supabase SQL script so public.submitted_lead_ids() exists.",
+        error,
+      ),
+    );
+  }
+
+  return new Set((fallbackData ?? []).map((response) => response.lead_id));
 }
 
 async function uploadAttachment(
