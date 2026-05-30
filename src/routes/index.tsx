@@ -38,7 +38,7 @@ function Index() {
   const [q, setQ] = useState("");
   const [center, setCenter] = useState<string>("All");
   const [admin, setAdmin] = useState<"checking" | "yes" | "no">("checking");
-  const [submittedLeadIds, setSubmittedLeadIds] = useState<Set<string>>(new Set());
+  const [submittedLeadIds, setSubmittedLeadIds] = useState<Set<string> | null>(null);
   const [loadingSubmitted, setLoadingSubmitted] = useState(false);
   const [submittedError, setSubmittedError] = useState<string | null>(null);
 
@@ -66,6 +66,7 @@ function Index() {
     if (auth.status !== "signed-in" || !visibility) return;
 
     setLoadingSubmitted(true);
+    setSubmittedLeadIds(null);
     setSubmittedError(null);
     loadSubmittedLeadIds()
       .then((ids) => {
@@ -74,7 +75,7 @@ function Index() {
       .catch((err) => {
         console.error(err);
         if (!cancelled) {
-          setSubmittedLeadIds(new Set());
+          setSubmittedLeadIds(null);
           setSubmittedError(
             err instanceof Error
               ? err.message
@@ -92,13 +93,15 @@ function Index() {
   }, [auth.status, visibility]);
 
   const visibleLeads = useMemo(() => {
-    if (!visibility) return [];
+    if (!visibility || !submittedLeadIds) return [];
     const scopedLeads =
       visibility.centers === "all"
         ? LEADS
         : LEADS.filter((lead) => visibility.centers.includes(lead.center));
     return scopedLeads.filter((lead) => !submittedLeadIds.has(lead.id));
   }, [submittedLeadIds, visibility]);
+
+  const submittedRowsReady = submittedLeadIds !== null && !loadingSubmitted;
 
   const centers = useMemo(
     () => ["All", ...Array.from(new Set(visibleLeads.map((l) => l.center)))],
@@ -209,7 +212,7 @@ function Index() {
               ))}
             </div>
             <span className="ml-auto text-xs text-muted-foreground">
-              {loadingSubmitted
+              {!submittedRowsReady
                 ? "Checking submitted rows..."
                 : `${filtered.length} of ${visibleLeads.length} open leads`}
             </span>
@@ -223,22 +226,28 @@ function Index() {
       </header>
 
       <main className="mx-auto mt-10 max-w-6xl space-y-8 px-6 sm:px-10">
-        {filtered.map((lead, i) => (
-          <LeadCard
-            key={lead.id}
-            lead={lead}
-            index={i}
-            canSeeOriginal={visibility.canSeeOriginalData}
-            onSubmitted={(leadId) =>
-              setSubmittedLeadIds((ids) => {
-                const next = new Set(ids);
-                next.add(leadId);
-                return next;
-              })
-            }
-          />
-        ))}
-        {filtered.length === 0 && (
+        {!submittedRowsReady && (
+          <div className="rounded-2xl border border-border/70 bg-white/80 p-10 text-center text-sm text-muted-foreground shadow-sm">
+            Checking submitted rows before loading the audit ledger...
+          </div>
+        )}
+        {submittedRowsReady &&
+          filtered.map((lead, i) => (
+            <LeadCard
+              key={lead.id}
+              lead={lead}
+              index={i}
+              canSeeOriginal={visibility.canSeeOriginalData}
+              onSubmitted={(leadId) =>
+                setSubmittedLeadIds((ids) => {
+                  const next = new Set(ids ?? []);
+                  next.add(leadId);
+                  return next;
+                })
+              }
+            />
+          ))}
+        {submittedRowsReady && filtered.length === 0 && (
           <div className="rounded-2xl border border-dashed border-border/60 p-16 text-center text-muted-foreground">
             Nothing to show with the current filters.
           </div>

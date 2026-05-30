@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { LEADS } from "@/data/leads";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { resetLeadResponseWithNotification } from "@/lib/api/admin.functions";
@@ -206,6 +207,10 @@ function AdminDashboard() {
   };
 
   const resetReasonIsValid = resetReason.trim().length >= 8;
+  const leadCreatedAtById = useMemo(
+    () => new Map(LEADS.map((lead) => [lead.id, lead.createdAt])),
+    [],
+  );
 
   const centers = useMemo(
     () => ["All", ...Array.from(new Set(responses.map((response) => response.center)))],
@@ -369,7 +374,7 @@ function AdminDashboard() {
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                   <span>Lead ID: {response.lead_id}</span>
                   <span>Submitted by: {response.submitted_by_email}</span>
-                  <span>Created: {fmtDate(response.created_at)}</span>
+                  <span>Created: {fmtDate(leadCreatedAtById.get(response.lead_id) ?? null)}</span>
                   <span>Updated: {fmtDate(response.updated_at)}</span>
                   {response.associate && <span>Associate: {response.associate}</span>}
                 </div>
