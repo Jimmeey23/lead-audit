@@ -13,11 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { resetLeadResponseWithNotification } from "@/lib/api/admin.functions";
 import {
   ADMIN_EMAIL,
   isCurrentUserAdmin,
   loadAdminResponses,
-  resetLeadResponse,
   type AdminResponse,
   type PersistedAttachment,
 } from "@/lib/lead-responses";
@@ -158,12 +159,33 @@ function AdminDashboard() {
     };
   }, [admin]);
 
-  const resetResponse = async (responseId: string) => {
-    setResettingId(responseId);
+  const resetResponse = async (response: AdminResponse) => {
+    const reason = window.prompt(
+      `Enter the rejection reason for ${response.lead_name}. This will be emailed to ${response.submitted_by_email}.`,
+    );
+    if (reason === null) return;
+    const trimmedReason = reason.trim();
+    if (trimmedReason.length < 8) {
+      setError("Please enter a clear rejection reason before resetting the row.");
+      return;
+    }
+
+    setResettingId(response.id);
     setError(null);
     try {
-      await resetLeadResponse(responseId);
-      setResponses((current) => current.filter((response) => response.id !== responseId));
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Admin session could not be verified.");
+
+      await resetLeadResponseWithNotification({
+        data: {
+          responseId: response.id,
+          reason: trimmedReason,
+          accessToken,
+        },
+      });
+      setResponses((current) => current.filter((item) => item.id !== response.id));
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Response could not be reset.");
@@ -351,7 +373,7 @@ function AdminDashboard() {
                   variant="outline"
                   size="sm"
                   disabled={resettingId === response.id}
-                  onClick={() => resetResponse(response.id)}
+                  onClick={() => resetResponse(response)}
                   className="mt-3 h-8 gap-1.5 text-xs"
                 >
                   <RotateCcw className="size-3.5" />
