@@ -86,6 +86,13 @@ function supabaseErrorMessage(context: string, error: unknown): string {
     .join(" ");
 }
 
+function networkErrorMessage(context: string, error: unknown): string {
+  if (error instanceof TypeError && /failed to fetch/i.test(error.message)) {
+    return `${context} Network request failed. This is usually caused by a large file upload, an interrupted connection, or Supabase Storage rejecting the request before it returns a detailed error. Try submitting once without files, then upload smaller supporting documents.`;
+  }
+  return supabaseErrorMessage(context, error);
+}
+
 async function signedUrl(storagePath: string): Promise<string | undefined> {
   const { data, error } = await supabase.storage
     .from(EVIDENCE_BUCKET)
@@ -212,7 +219,14 @@ async function uploadAttachment(
       contentType: attachment.file.type || "application/octet-stream",
       upsert: false,
     });
-  if (error) throw error;
+  if (error) {
+    throw new Error(
+      supabaseErrorMessage(
+        `Supporting document "${attachment.file.name}" could not be uploaded.`,
+        error,
+      ),
+    );
+  }
 
   return {
     name: attachment.file.name,
@@ -248,7 +262,7 @@ export async function saveLeadResponse(
         response_notes: state.responseNotes || null,
         submitted_by: user.id,
         submitted_by_email: user.email,
-        status: "submitted",
+        status: "draft",
         updated_at: new Date().toISOString(),
       },
       { onConflict: "lead_id,submitted_by" },
@@ -267,7 +281,14 @@ export async function saveLeadResponse(
 
   const firstAttachments = await Promise.all(
     state.firstOutreachAttachments.map((attachment) =>
-      uploadAttachment(responseId, "first_outreach", attachment),
+      uploadAttachment(responseId, "first_outreach", attachment).catch((error) => {
+        throw new Error(
+          networkErrorMessage(
+            `Supporting document "${attachment.name}" could not be uploaded.`,
+            error,
+          ),
+        );
+      }),
     ),
   );
   const followUps = await Promise.all(
@@ -275,7 +296,14 @@ export async function saveLeadResponse(
       ...followUp,
       attachments: await Promise.all(
         followUp.attachments.map((attachment) =>
-          uploadAttachment(responseId, `follow_up_${index + 1}`, attachment),
+          uploadAttachment(responseId, `follow_up_${index + 1}`, attachment).catch((error) => {
+            throw new Error(
+              networkErrorMessage(
+                `Supporting document "${attachment.name}" could not be uploaded.`,
+                error,
+              ),
+            );
+          }),
         ),
       ),
     })),
@@ -382,6 +410,15 @@ export async function saveLeadResponse(
   if (stalePaths.length > 0) {
     await supabase.storage.from(EVIDENCE_BUCKET).remove(stalePaths);
   }
+
+  const { error: submitError } = await supabase
+    .from("lead_responses")
+    .update({ status: "submitted", updated_at: new Date().toISOString() })
+    .eq("id", responseId);
+  if (submitError)
+    throw new Error(
+      supabaseErrorMessage("Response could not be marked as submitted.", submitError),
+    );
 
   return {
     responseNotes: state.responseNotes,
