@@ -886,6 +886,24 @@ const LEGACY_LEADS: Lead[] = raw.map((r) => {
 // Domain-scoped visibility for regular users. Only the configured admin sees all rows.
 export type Visibility = { centers: "all" | string[]; canSeeOriginalData: boolean };
 
+const BENGALURU_CENTERS = [
+  "Kenkere House, Bengaluru",
+  "the Studio by Copper + Cloves, Indiranagar",
+];
+const KWALITY_CENTER = "Kwality House, Kemps Corner";
+const SUPREME_CENTER = "Supreme HQ, Bandra";
+
+function localPartMatches(local: string, names: string[]) {
+  return names.some(
+    (name) =>
+      local === name ||
+      local.startsWith(`${name}.`) ||
+      local.startsWith(`${name}_`) ||
+      local.startsWith(`${name}-`) ||
+      local.startsWith(`${name}+`),
+  );
+}
+
 export function visibilityFor(email: string | undefined | null): Visibility | null {
   if (!email) return null;
   const lower = email.toLowerCase();
@@ -896,15 +914,26 @@ export function visibilityFor(email: string | undefined | null): Visibility | nu
     return { centers: "all", canSeeOriginalData: true };
   }
   if (domain === "physique57bengaluru.com") {
-    return { centers: ["Kenkere House, Bengaluru"], canSeeOriginalData: false };
+    return { centers: BENGALURU_CENTERS, canSeeOriginalData: false };
   }
   if (domain === "physique57mumbai.com") {
-    const kwalityPrefixes = ["zaheer", "vahishta", "zahur", "akshay", "sheetal"];
-    const isKwality = kwalityPrefixes.some((prefix) => local.startsWith(prefix));
-    return {
-      centers: isKwality ? ["Kwality House, Kemps Corner"] : ["Supreme HQ, Bandra"],
-      canSeeOriginalData: false,
-    };
+    const isKwality = localPartMatches(local, [
+      "akshay",
+      "zaheer",
+      "taahira",
+      "sheetal",
+      "vahishta",
+    ]);
+    if (isKwality) {
+      return { centers: [KWALITY_CENTER], canSeeOriginalData: false };
+    }
+
+    const isSupreme = localPartMatches(local, ["imran", "shipra", "deesha", "nadiya"]);
+    if (isSupreme) {
+      return { centers: [SUPREME_CENTER], canSeeOriginalData: false };
+    }
+
+    return null;
   }
   return null;
 }
