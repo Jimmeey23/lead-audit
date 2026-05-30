@@ -112,9 +112,9 @@ function LoginPage() {
             {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
 
             <div className="mt-8 space-y-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
-              <div>Admin access — {ADMIN_EMAIL}</div>
-              <div>info@physique57india.com — not admin</div>
-              <div>Studio email groups — location-scoped rows</div>
+              <div></div>
+              <div></div>
+              <div></div>
             </div>
           </div>
         </div>
