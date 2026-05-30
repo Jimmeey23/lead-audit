@@ -65,7 +65,8 @@ function LoginPage() {
             </h1>
             <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground">
               A centralized platform for reviewing and validating outreach activity across studios.
-              Lead entries are visible only to the configured admin account.
+              Lead entries are scoped to approved studio email groups, while admin access can review
+              every location.
             </p>
             <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground">
               Track interactions, review supporting documentation, maintain accurate timelines, and
@@ -75,8 +76,8 @@ function LoginPage() {
             </p>
             <ul className="mt-8 space-y-3 text-sm text-muted-foreground">
               <li className="flex items-start gap-2.5">
-                <ShieldCheck className="mt-0.5 size-4 text-primary" /> Visibility is limited to the
-                configured admin account.
+                <ShieldCheck className="mt-0.5 size-4 text-primary" /> Visibility follows approved
+                studio email groups and admin access.
               </li>
               <li className="flex items-start gap-2.5">
                 <ShieldCheck className="mt-0.5 size-4 text-primary" /> Supporting documents are
@@ -113,7 +114,7 @@ function LoginPage() {
             <div className="mt-8 space-y-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
               <div>Admin access — {ADMIN_EMAIL}</div>
               <div>info@physique57india.com — not admin</div>
-              <div>Studio email groups — no automatic entry visibility</div>
+              <div>Studio email groups — location-scoped rows</div>
             </div>
           </div>
         </div>

@@ -883,15 +883,28 @@ const LEGACY_LEADS: Lead[] = raw.map((r) => {
   };
 });
 
-// Admin-only visibility rule. Studio email domains do not grant entry access.
+// Domain-scoped visibility for regular users. Only the configured admin sees all rows.
 export type Visibility = { centers: "all" | string[]; canSeeOriginalData: boolean };
 
 export function visibilityFor(email: string | undefined | null): Visibility | null {
   if (!email) return null;
   const lower = email.toLowerCase();
+  const [local, domain] = lower.split("@");
+  if (!domain) return null;
 
   if (lower === "jimmeey@physique57india.com") {
     return { centers: "all", canSeeOriginalData: true };
+  }
+  if (domain === "physique57bengaluru.com") {
+    return { centers: ["Kenkere House, Bengaluru"], canSeeOriginalData: false };
+  }
+  if (domain === "physique57mumbai.com") {
+    const kwalityPrefixes = ["zaheer", "vahishta", "zahur", "akshay", "sheetal"];
+    const isKwality = kwalityPrefixes.some((prefix) => local.startsWith(prefix));
+    return {
+      centers: isKwality ? ["Kwality House, Kemps Corner"] : ["Supreme HQ, Bandra"],
+      canSeeOriginalData: false,
+    };
   }
   return null;
 }

@@ -1,7 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { LEADS } from "@/data/leads";
+import { LEADS, visibilityFor } from "@/data/leads";
 import { LeadCard } from "@/components/LeadCard";
 import { Input } from "@/components/ui/input";
 import { Search, Sparkles, LogOut, ShieldCheck } from "lucide-react";
@@ -43,6 +43,10 @@ function Index() {
 
   const email = auth.user?.email ?? null;
   const isAdmin = admin === "yes";
+  const visibility = useMemo(() => {
+    if (isAdmin) return { centers: "all" as const, canSeeOriginalData: true };
+    return visibilityFor(email);
+  }, [email, isAdmin]);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,7 +62,7 @@ function Index() {
 
   useEffect(() => {
     let cancelled = false;
-    if (auth.status !== "signed-in" || !isAdmin) return;
+    if (auth.status !== "signed-in" || !visibility) return;
 
     setLoadingSubmitted(true);
     loadSubmittedLeadIds()
@@ -76,11 +80,16 @@ function Index() {
     return () => {
       cancelled = true;
     };
-  }, [auth.status, isAdmin]);
+  }, [auth.status, visibility]);
 
   const visibleLeads = useMemo(() => {
-    return isAdmin ? LEADS.filter((lead) => !submittedLeadIds.has(lead.id)) : [];
-  }, [isAdmin, submittedLeadIds]);
+    if (!visibility) return [];
+    const scopedLeads =
+      visibility.centers === "all"
+        ? LEADS
+        : LEADS.filter((lead) => visibility.centers.includes(lead.center));
+    return scopedLeads.filter((lead) => !submittedLeadIds.has(lead.id));
+  }, [submittedLeadIds, visibility]);
 
   const centers = useMemo(
     () => ["All", ...Array.from(new Set(visibleLeads.map((l) => l.center)))],
@@ -110,13 +119,14 @@ function Index() {
     );
   }
 
-  if (!isAdmin) {
+  if (!visibility) {
     return (
       <div className="flex min-h-screen items-center justify-center px-6">
         <div className="glass max-w-md rounded-2xl border border-border/70 p-8 text-center">
-          <h2 className="text-xl text-foreground">Admin access required</h2>
+          <h2 className="text-xl text-foreground">This account isn't recognised</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Signed in as {email}. Lead entries are visible only to the configured admin account.
+            Signed in as {email}. Lead entries are scoped to approved Physique 57 studio email
+            domains.
           </p>
           <Button onClick={() => auth.signOut()} className="mt-5">
             Sign out
@@ -204,7 +214,7 @@ function Index() {
             key={lead.id}
             lead={lead}
             index={i}
-            canSeeOriginal={isAdmin}
+            canSeeOriginal={visibility.canSeeOriginalData}
             onSubmitted={(leadId) =>
               setSubmittedLeadIds((ids) => {
                 const next = new Set(ids);
