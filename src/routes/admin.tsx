@@ -2,9 +2,9 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
+  Download,
   FileText,
   LogOut,
-  Paperclip,
   RotateCcw,
   Search,
   ShieldCheck,
@@ -19,6 +19,7 @@ import {
   loadAdminResponses,
   resetLeadResponse,
   type AdminResponse,
+  type PersistedAttachment,
 } from "@/lib/lead-responses";
 
 export const Route = createFileRoute("/admin")({
@@ -45,6 +46,61 @@ function fmtDate(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function DocumentPreview({ file }: { file: PersistedAttachment }) {
+  const url = file.url;
+  const name = file.name;
+  const type = file.type || "";
+
+  if (!url) {
+    return (
+      <div className="rounded-lg border border-border/70 bg-secondary/40 p-3 text-xs text-muted-foreground">
+        <FileText className="mb-2 size-4" />
+        {name}
+      </div>
+    );
+  }
+
+  return (
+    <figure className="overflow-hidden rounded-lg border border-border/70 bg-white shadow-sm">
+      {type.startsWith("image/") ? (
+        <a href={url} target="_blank" rel="noreferrer">
+          <img src={url} alt={name} className="h-56 w-full object-contain bg-slate-50" />
+        </a>
+      ) : type.startsWith("video/") ? (
+        <video src={url} controls className="h-56 w-full bg-black" />
+      ) : type.startsWith("audio/") ? (
+        <div className="bg-slate-50 p-3">
+          <audio src={url} controls className="w-full" />
+        </div>
+      ) : type === "application/pdf" ? (
+        <iframe title={name} src={url} className="h-72 w-full bg-slate-50" />
+      ) : (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="flex min-h-32 flex-col items-center justify-center gap-2 bg-slate-50 p-4 text-center text-sm text-muted-foreground hover:text-primary"
+        >
+          <FileText className="size-6" />
+          Open document
+        </a>
+      )}
+      <figcaption className="flex items-center justify-between gap-3 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+        <span className="min-w-0 truncate">{name}</span>
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex shrink-0 items-center gap-1 text-primary hover:underline"
+        >
+          <Download className="size-3.5" />
+          Open
+        </a>
+      </figcaption>
+    </figure>
+  );
 }
 
 function AdminDashboard() {
@@ -336,18 +392,9 @@ function AdminDashboard() {
                     </div>
                   )}
                   {touchpoint.files.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
+                    <div className="mt-3 grid gap-3">
                       {touchpoint.files.map((file) => (
-                        <a
-                          key={file.storagePath ?? file.name}
-                          href={file.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 rounded-md bg-secondary/70 px-2.5 py-1 text-xs text-foreground/80 hover:text-primary"
-                        >
-                          <Paperclip className="size-3.5" />
-                          <span className="max-w-[180px] truncate">{file.name}</span>
-                        </a>
+                        <DocumentPreview key={file.storagePath ?? file.name} file={file} />
                       ))}
                     </div>
                   )}
