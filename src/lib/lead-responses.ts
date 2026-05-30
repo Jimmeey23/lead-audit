@@ -5,6 +5,19 @@ import type { Tables } from "@/integrations/supabase/types";
 export const EVIDENCE_BUCKET = "lead-evidence";
 export const ADMIN_EMAIL = "jimmeey@physique57india.com";
 export const MAX_PROOF_FILE_SIZE_BYTES = 200 * 1024 * 1024;
+const STORAGE_ALLOWED_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/wav",
+  "video/mp4",
+  "video/quicktime",
+  "application/pdf",
+  "application/octet-stream",
+]);
 
 export type PersistedAttachment = {
   id?: string;
@@ -88,9 +101,19 @@ function supabaseErrorMessage(context: string, error: unknown): string {
 
 function networkErrorMessage(context: string, error: unknown): string {
   if (error instanceof TypeError && /failed to fetch/i.test(error.message)) {
-    return `${context} Network request failed. This is usually caused by a large file upload, an interrupted connection, or Supabase Storage rejecting the request before it returns a detailed error. Try submitting once without files, then upload smaller supporting documents.`;
+    return `${context} Network request failed while uploading a supporting document. This is usually caused by a large file, an interrupted connection, or an unsupported audio recording format. Try submitting with smaller files, or mark supporting documents unavailable and add the reason if the file cannot be uploaded.`;
   }
   return supabaseErrorMessage(context, error);
+}
+
+function storageContentType(file: File): string {
+  const type = file.type || "application/octet-stream";
+  if (STORAGE_ALLOWED_MIME_TYPES.has(type)) return type;
+  if (["audio/x-m4a", "audio/m4a", "audio/aac", "audio/x-aac"].includes(type)) return "audio/mp4";
+  if (type.startsWith("image/")) return "application/octet-stream";
+  if (type.startsWith("audio/")) return "application/octet-stream";
+  if (type.startsWith("video/")) return "application/octet-stream";
+  return "application/octet-stream";
 }
 
 async function signedUrl(storagePath: string): Promise<string | undefined> {
@@ -222,7 +245,7 @@ async function uploadAttachment(
   const { error } = await supabase.storage
     .from(EVIDENCE_BUCKET)
     .upload(storagePath, attachment.file, {
-      contentType: attachment.file.type || "application/octet-stream",
+      contentType: storageContentType(attachment.file),
       upsert: false,
     });
   if (error) {
@@ -285,36 +308,6 @@ export async function saveLeadResponse(
     .select("storage_path")
     .eq("response_id", responseId);
 
-  const firstAttachments = await Promise.all(
-    state.firstOutreachAttachments.map((attachment) =>
-      uploadAttachment(responseId, "first_outreach", attachment).catch((error) => {
-        throw new Error(
-          networkErrorMessage(
-            `Supporting document "${attachment.name}" could not be uploaded.`,
-            error,
-          ),
-        );
-      }),
-    ),
-  );
-  const followUps = await Promise.all(
-    state.followUps.map(async (followUp, index) => ({
-      ...followUp,
-      attachments: await Promise.all(
-        followUp.attachments.map((attachment) =>
-          uploadAttachment(responseId, `follow_up_${index + 1}`, attachment).catch((error) => {
-            throw new Error(
-              networkErrorMessage(
-                `Supporting document "${attachment.name}" could not be uploaded.`,
-                error,
-              ),
-            );
-          }),
-        ),
-      ),
-    })),
-  );
-
   const { error: deleteError } = await supabase
     .from("lead_response_touchpoints")
     .delete()
@@ -324,6 +317,7 @@ export async function saveLeadResponse(
       supabaseErrorMessage("Existing touchpoints could not be replaced.", deleteError),
     );
 
+  const touchpointFollowUps = state.followUps;
   const touchpoints = [
     {
       response_id: responseId,
@@ -336,7 +330,7 @@ export async function saveLeadResponse(
       evidence_unavailable: state.firstOutreachEvidenceUnavailable,
       evidence_unavailable_reason: state.firstOutreachEvidenceReason || null,
     },
-    ...followUps.map((followUp, index) => ({
+    ...touchpointFollowUps.map((followUp, index) => ({
       response_id: responseId,
       touchpoint_key: `follow_up_${index + 1}`,
       touchpoint_order: index + 1,
@@ -353,14 +347,13 @@ export async function saveLeadResponse(
         touchpoint.occurred_at ||
         touchpoint.comment ||
         touchpoint.evidence_unavailable ||
-        firstAttachments.length,
+        state.firstOutreachAttachments.length,
       );
-    const followUp = followUps[index - 1];
     return Boolean(
       touchpoint.occurred_at ||
       touchpoint.comment ||
       touchpoint.evidence_unavailable ||
-      followUp.attachments.length,
+      state.followUps[index - 1]?.attachments.length,
     );
   });
 
@@ -382,9 +375,40 @@ export async function saveLeadResponse(
       touchpoint.id,
     ]),
   );
+
+  const firstAttachments = await Promise.all(
+    state.firstOutreachAttachments.map((attachment) =>
+      uploadAttachment(responseId, "first_outreach", attachment).catch((error) => {
+        throw new Error(
+          networkErrorMessage(
+            `Supporting document "${attachment.name}" could not be uploaded.`,
+            error,
+          ),
+        );
+      }),
+    ),
+  );
+  const uploadedFollowUps = await Promise.all(
+    state.followUps.map(async (followUp, index) => ({
+      ...followUp,
+      attachments: await Promise.all(
+        followUp.attachments.map((attachment) =>
+          uploadAttachment(responseId, `follow_up_${index + 1}`, attachment).catch((error) => {
+            throw new Error(
+              networkErrorMessage(
+                `Supporting document "${attachment.name}" could not be uploaded.`,
+                error,
+              ),
+            );
+          }),
+        ),
+      ),
+    })),
+  );
+
   const fileRows = [
     ...firstAttachments.map((attachment) => ({ touchpointKey: "first_outreach", attachment })),
-    ...followUps.flatMap((followUp, index) =>
+    ...uploadedFollowUps.flatMap((followUp, index) =>
       followUp.attachments.map((attachment) => ({
         touchpointKey: `follow_up_${index + 1}`,
         attachment,
@@ -434,7 +458,7 @@ export async function saveLeadResponse(
     firstOutreachEvidenceUnavailable: state.firstOutreachEvidenceUnavailable,
     firstOutreachEvidenceReason: state.firstOutreachEvidenceReason,
     firstOutreachAttachments: firstAttachments,
-    followUps,
+    followUps: uploadedFollowUps,
   };
 }
 

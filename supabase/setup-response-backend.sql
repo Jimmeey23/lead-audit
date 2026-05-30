@@ -362,7 +362,28 @@ values (
   'lead-evidence',
   false,
   209715200,
-  array['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'video/mp4', 'video/quicktime', 'application/pdf', 'application/octet-stream']
+  array[
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+    'audio/mpeg',
+    'audio/mp3',
+    'audio/mp4',
+    'audio/m4a',
+    'audio/x-m4a',
+    'audio/aac',
+    'audio/x-aac',
+    'audio/wav',
+    'audio/x-wav',
+    'audio/ogg',
+    'audio/webm',
+    'video/mp4',
+    'video/quicktime',
+    'video/webm',
+    'application/pdf',
+    'application/octet-stream'
+  ]
 )
 on conflict (id) do update
 set
