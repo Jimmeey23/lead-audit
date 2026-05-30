@@ -33,6 +33,14 @@ function supabaseForToken(accessToken: string) {
   });
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 async function sendRejectionEmail({
   to,
   leadName,
@@ -47,20 +55,57 @@ async function sendRejectionEmail({
   const fromEmail = env("MAILTRAP_FROM_EMAIL");
   const fromName = process.env.MAILTRAP_FROM_NAME || "Physique 57 Outreach Audit";
   const token = env("MAILTRAP_API_TOKEN");
-  const subject = `Outreach audit row reset: ${leadName}`;
+  const escapedLeadName = escapeHtml(leadName);
+  const escapedLeadId = escapeHtml(leadId);
+  const escapedReason = escapeHtml(reason).replace(/\n/g, "<br />");
+  const subject = `Action required: Outreach audit row reset for ${leadName}`;
   const text = [
-    `Your submitted outreach audit row for ${leadName} (${leadId}) has been reset by the admin team.`,
+    "Hello,",
+    "",
+    `Your submitted outreach audit row for ${leadName} (${leadId}) has been reviewed and reset by the admin team.`,
+    "The row is now back in your audit ledger as a draft, so you can update it and submit it again. Any details already saved against the row, including comments, touchpoints, and supporting documents, have been retained.",
     "",
     "Reason for rejection:",
     reason,
     "",
-    "Please review the lead in the audit ledger, correct the entry, attach the required supporting documents or provide the required unavailable-document reason, and submit it again.",
+    "Next steps:",
+    "1. Open the outreach audit ledger and locate this lead.",
+    "2. Review the rejection reason above and update the relevant outreach or follow-up fields.",
+    "3. Check that the date, medium, comments, and supporting documents are complete and accurate.",
+    "4. If supporting documents are not available, switch on the unavailable-document option and enter a clear reason.",
+    "5. Submit the row again once all required fields are complete.",
+    "",
+    "Please complete the corrections as soon as possible so the admin team can review the updated entry.",
+    "",
+    "Regards,",
+    "Physique 57 Outreach Audit Team",
   ].join("\n");
   const html = `
-    <p>Your submitted outreach audit row for <strong>${leadName}</strong> (${leadId}) has been reset by the admin team.</p>
-    <p><strong>Reason for rejection:</strong></p>
-    <p>${reason.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br />")}</p>
-    <p>Please review the lead in the audit ledger, correct the entry, attach the required supporting documents or provide the required unavailable-document reason, and submit it again.</p>
+    <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.55;">
+      <p>Hello,</p>
+      <p>
+        Your submitted outreach audit row for
+        <strong>${escapedLeadName}</strong> (${escapedLeadId}) has been reviewed and reset by the admin team.
+      </p>
+      <p>
+        The row is now back in your audit ledger as a draft, so you can update it and submit it again.
+        Any details already saved against the row, including comments, touchpoints, and supporting documents, have been retained.
+      </p>
+      <div style="margin: 18px 0; padding: 14px 16px; border-left: 4px solid #2563eb; background: #eff6ff;">
+        <p style="margin: 0 0 8px; font-weight: 700;">Reason for rejection</p>
+        <p style="margin: 0;">${escapedReason}</p>
+      </div>
+      <p style="font-weight: 700;">Next steps</p>
+      <ol style="padding-left: 22px;">
+        <li>Open the outreach audit ledger and locate this lead.</li>
+        <li>Review the rejection reason above and update the relevant outreach or follow-up fields.</li>
+        <li>Check that the date, medium, comments, and supporting documents are complete and accurate.</li>
+        <li>If supporting documents are not available, switch on the unavailable-document option and enter a clear reason.</li>
+        <li>Submit the row again once all required fields are complete.</li>
+      </ol>
+      <p>Please complete the corrections as soon as possible so the admin team can review the updated entry.</p>
+      <p>Regards,<br />Physique 57 Outreach Audit Team</p>
+    </div>
   `;
 
   const response = await fetch("https://send.api.mailtrap.io/api/send", {
