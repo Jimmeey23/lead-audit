@@ -179,7 +179,7 @@ function AdminDashboard() {
       return;
     }
 
-    setResettingId(response.id);
+    setResettingId(resetCandidate.id);
     setError(null);
     try {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
