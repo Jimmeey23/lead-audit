@@ -317,6 +317,7 @@ export function LeadCard({
     firstOutreachAttachments: [],
     followUps: lead.followUps.map((f) => ({
       date: "",
+      medium: "WhatsApp",
       comment: "",
       evidenceUnavailable: false,
       evidenceReason: "",
@@ -418,7 +419,7 @@ export function LeadCard({
     state.followUps.forEach((f, i) => {
       if (f.date || f.comment || f.attachments.length || f.evidenceUnavailable) {
         items.push({
-          label: `Follow-up ${i + 1}`,
+          label: `Follow-up ${i + 1} · ${f.medium}`,
           date: f.date,
           comment: f.comment,
           evidenceUnavailable: f.evidenceUnavailable,
@@ -711,14 +712,33 @@ export function LeadCard({
                     />
                   )}
                   <div className="grid gap-3">
-                    <FieldBlock label="Date & time">
-                      <Input
-                        type="datetime-local"
-                        value={f.date}
-                        onChange={(e) => updateFU(i, { date: e.target.value })}
-                        className="bg-white"
-                      />
-                    </FieldBlock>
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <FieldBlock label="Date & time">
+                        <Input
+                          type="datetime-local"
+                          value={f.date}
+                          onChange={(e) => updateFU(i, { date: e.target.value })}
+                          className="bg-white"
+                        />
+                      </FieldBlock>
+                      <FieldBlock label="Medium">
+                        <Select
+                          value={f.medium}
+                          onValueChange={(value) => updateFU(i, { medium: value })}
+                        >
+                          <SelectTrigger className="bg-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {MEDIUMS.map((medium) => (
+                              <SelectItem key={medium} value={medium}>
+                                {medium}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FieldBlock>
+                    </div>
                     <FieldBlock label="Comments">
                       <Textarea
                         value={f.comment}

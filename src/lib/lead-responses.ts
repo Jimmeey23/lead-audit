@@ -32,6 +32,7 @@ export type LeadResponseState = {
   firstOutreachAttachments: PersistedAttachment[];
   followUps: {
     date: string;
+    medium: string;
     comment: string;
     evidenceUnavailable: boolean;
     evidenceReason: string;
@@ -129,6 +130,7 @@ function rowToState(row: ResponseRow, fallbackFollowUps: Lead["followUps"]): Lea
       const touchpoint = touchpoints.find((t) => t.touchpoint_key === `follow_up_${index + 1}`);
       return {
         date: toInputValue(touchpoint?.occurred_at ?? null),
+        medium: touchpoint?.medium ?? "WhatsApp",
         comment: touchpoint?.comment ?? "",
         evidenceUnavailable: touchpoint?.evidence_unavailable ?? false,
         evidenceReason: touchpoint?.evidence_unavailable_reason ?? "",
@@ -306,7 +308,7 @@ export async function saveLeadResponse(
       touchpoint_order: index + 1,
       label: `Follow-up ${index + 1}`,
       occurred_at: toDatabaseDate(followUp.date),
-      medium: null,
+      medium: followUp.medium,
       comment: followUp.comment || null,
       evidence_unavailable: followUp.evidenceUnavailable,
       evidence_unavailable_reason: followUp.evidenceReason || null,
