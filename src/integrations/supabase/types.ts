@@ -84,6 +84,8 @@ export type Database = {
           occurred_at: string | null;
           medium: string | null;
           comment: string | null;
+          evidence_unavailable: boolean;
+          evidence_unavailable_reason: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -96,6 +98,8 @@ export type Database = {
           occurred_at?: string | null;
           medium?: string | null;
           comment?: string | null;
+          evidence_unavailable?: boolean;
+          evidence_unavailable_reason?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -108,6 +112,8 @@ export type Database = {
           occurred_at?: string | null;
           medium?: string | null;
           comment?: string | null;
+          evidence_unavailable?: boolean;
+          evidence_unavailable_reason?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -125,6 +131,7 @@ export type Database = {
           stage_name: string | null;
           class_type: string | null;
           source_name: string | null;
+          response_notes: string | null;
           submitted_by: string;
           submitted_by_email: string;
           status: string;
@@ -142,6 +149,7 @@ export type Database = {
           stage_name?: string | null;
           class_type?: string | null;
           source_name?: string | null;
+          response_notes?: string | null;
           submitted_by: string;
           submitted_by_email: string;
           status?: string;
@@ -159,6 +167,7 @@ export type Database = {
           stage_name?: string | null;
           class_type?: string | null;
           source_name?: string | null;
+          response_notes?: string | null;
           submitted_by?: string;
           submitted_by_email?: string;
           status?: string;

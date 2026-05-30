@@ -32,12 +32,7 @@ stable
 security definer
 set search_path = public
 as $$
-  select exists (
-    select 1
-    from public.admin_users
-    where active = true
-      and lower(email) = lower(coalesce(user_email, auth.email()))
-  );
+  select lower(coalesce(user_email, auth.email())) = 'jimmeey@physique57india.com';
 $$;
 
 create table if not exists public.lead_responses (
@@ -51,6 +46,7 @@ create table if not exists public.lead_responses (
   stage_name text,
   class_type text,
   source_name text,
+  response_notes text,
   submitted_by uuid not null references auth.users(id) on delete cascade,
   submitted_by_email text not null,
   status text not null default 'submitted',
@@ -59,6 +55,46 @@ create table if not exists public.lead_responses (
   constraint lead_responses_status_check check (status in ('draft', 'submitted', 'reviewed')),
   constraint lead_responses_unique_submitter unique (lead_id, submitted_by)
 );
+
+alter table public.lead_responses
+add column if not exists lead_email text;
+
+alter table public.lead_responses
+add column if not exists lead_phone text;
+
+alter table public.lead_responses
+add column if not exists center text;
+
+alter table public.lead_responses
+add column if not exists associate text;
+
+alter table public.lead_responses
+add column if not exists stage_name text;
+
+alter table public.lead_responses
+add column if not exists class_type text;
+
+alter table public.lead_responses
+add column if not exists source_name text;
+
+alter table public.lead_responses
+add column if not exists response_notes text;
+
+alter table public.lead_responses
+alter column status set default 'submitted';
+
+do $$
+begin
+  alter table public.lead_responses
+    drop constraint if exists lead_responses_status_check;
+
+  alter table public.lead_responses
+    add constraint lead_responses_status_check
+    check (status in ('draft', 'submitted', 'reviewed'));
+end $$;
+
+create unique index if not exists lead_responses_unique_submitter_idx
+  on public.lead_responses (lead_id, submitted_by);
 
 create table if not exists public.lead_response_touchpoints (
   id uuid primary key default gen_random_uuid(),
@@ -69,10 +105,24 @@ create table if not exists public.lead_response_touchpoints (
   occurred_at timestamptz,
   medium text,
   comment text,
+  evidence_unavailable boolean not null default false,
+  evidence_unavailable_reason text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint lead_response_touchpoints_unique_key unique (response_id, touchpoint_key)
 );
+
+alter table public.lead_response_touchpoints
+add column if not exists evidence_unavailable boolean not null default false;
+
+alter table public.lead_response_touchpoints
+add column if not exists evidence_unavailable_reason text;
+
+alter table public.lead_response_touchpoints
+add column if not exists medium text;
+
+alter table public.lead_response_touchpoints
+add column if not exists comment text;
 
 create table if not exists public.lead_response_files (
   id uuid primary key default gen_random_uuid(),
@@ -159,12 +209,27 @@ to authenticated
 using (submitted_by = auth.uid())
 with check (submitted_by = auth.uid() and lower(submitted_by_email) = lower(auth.email()));
 
+drop policy if exists "Admins can reset lead responses" on public.lead_responses;
+create policy "Admins can reset lead responses"
+on public.lead_responses
+for update
+to authenticated
+using (public.is_active_admin())
+with check (public.is_active_admin());
+
 drop policy if exists "Users can delete own lead responses" on public.lead_responses;
 create policy "Users can delete own lead responses"
 on public.lead_responses
 for delete
 to authenticated
 using (submitted_by = auth.uid());
+
+drop policy if exists "Admins can delete lead responses" on public.lead_responses;
+create policy "Admins can delete lead responses"
+on public.lead_responses
+for delete
+to authenticated
+using (public.is_active_admin());
 
 drop policy if exists "Users and admins can read touchpoints" on public.lead_response_touchpoints;
 create policy "Users and admins can read touchpoints"
@@ -282,7 +347,7 @@ values (
   'lead-evidence',
   'lead-evidence',
   false,
-  52428800,
+  209715200,
   array['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'video/mp4', 'video/quicktime', 'application/pdf', 'application/octet-stream']
 )
 on conflict (id) do update
@@ -320,11 +385,11 @@ for delete
 to authenticated
 using (bucket_id = 'lead-evidence' and (owner = auth.uid() or public.is_active_admin()));
 
--- Add your first admin after setup.
--- Replace the email below, then run this statement.
+-- The app and RLS only treat this address as admin.
+-- info@physique57india.com is intentionally not an admin account.
 --
 -- insert into public.admin_users (email, role, active)
--- select 'your-admin-email@physique57india.com', 'admin', true
+-- select 'jimmeey@physique57india.com', 'admin', true
 -- where not exists (
---   select 1 from public.admin_users where lower(email) = lower('your-admin-email@physique57india.com')
+--   select 1 from public.admin_users where lower(email) = lower('jimmeey@physique57india.com')
 -- );

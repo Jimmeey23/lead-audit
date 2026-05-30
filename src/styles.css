@@ -65,25 +65,25 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(0.16 0.012 260);
-  --foreground: oklch(0.97 0.01 90);
-  --card: oklch(0.21 0.014 260);
-  --card-foreground: oklch(0.97 0.01 90);
-  --popover: oklch(0.21 0.014 260);
-  --popover-foreground: oklch(0.97 0.01 90);
-  --primary: oklch(0.78 0.16 70);
-  --primary-foreground: oklch(0.18 0.02 60);
-  --secondary: oklch(0.27 0.018 260);
-  --secondary-foreground: oklch(0.97 0.01 90);
-  --muted: oklch(0.25 0.014 260);
-  --muted-foreground: oklch(0.68 0.02 260);
-  --accent: oklch(0.7 0.14 180);
-  --accent-foreground: oklch(0.16 0.012 260);
-  --destructive: oklch(0.62 0.22 25);
-  --destructive-foreground: oklch(0.98 0.005 0);
-  --border: oklch(0.3 0.015 260);
-  --input: oklch(0.27 0.018 260);
-  --ring: oklch(0.78 0.16 70);
+  --background: oklch(0.985 0.006 95);
+  --foreground: oklch(0.22 0.025 258);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.025 258);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.025 258);
+  --primary: oklch(0.52 0.18 255);
+  --primary-foreground: oklch(0.99 0.004 255);
+  --secondary: oklch(0.95 0.012 245);
+  --secondary-foreground: oklch(0.28 0.03 258);
+  --muted: oklch(0.95 0.01 245);
+  --muted-foreground: oklch(0.47 0.035 258);
+  --accent: oklch(0.64 0.12 176);
+  --accent-foreground: oklch(0.99 0.004 95);
+  --destructive: oklch(0.58 0.21 25);
+  --destructive-foreground: oklch(0.99 0.005 0);
+  --border: oklch(0.88 0.015 245);
+  --input: oklch(0.9 0.015 245);
+  --ring: oklch(0.52 0.18 255);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -142,21 +142,30 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: ui-sans-serif, system-ui, -apple-system, "Inter", sans-serif;
+    font-family:
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      "Inter",
+      sans-serif;
     background-image:
-      radial-gradient(at 12% 0%, oklch(0.78 0.16 70 / 0.08) 0, transparent 50%),
-      radial-gradient(at 88% 100%, oklch(0.7 0.14 180 / 0.06) 0, transparent 50%);
+      linear-gradient(180deg, oklch(1 0 0 / 0.88), transparent 24rem),
+      radial-gradient(at 8% 0%, oklch(0.68 0.14 255 / 0.14) 0, transparent 32rem),
+      radial-gradient(at 94% 6%, oklch(0.72 0.12 190 / 0.12) 0, transparent 30rem);
     background-attachment: fixed;
   }
-  h1, h2, h3, .display {
+  h1,
+  h2,
+  h3,
+  .display {
     font-family: "Instrument Serif", "Cormorant Garamond", ui-serif, Georgia, serif;
-    letter-spacing: -0.01em;
+    letter-spacing: 0;
   }
 }
 
 @layer utilities {
   .glass {
-    background: color-mix(in oklab, var(--card) 75%, transparent);
+    background: color-mix(in oklab, var(--card) 88%, transparent);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
   }

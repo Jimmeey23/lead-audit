@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
 export const EVIDENCE_BUCKET = "lead-evidence";
+export const ADMIN_EMAIL = "jimmeey@physique57india.com";
+export const MAX_PROOF_FILE_SIZE_BYTES = 200 * 1024 * 1024;
 
 export type PersistedAttachment = {
   id?: string;
@@ -14,13 +16,25 @@ export type PersistedAttachment = {
   file?: File;
 };
 
+export function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${bytes} B`;
+}
+
 export type LeadResponseState = {
+  responseNotes: string;
   firstOutreachDate: string;
   firstOutreachMedium: string;
+  firstOutreachComment: string;
+  firstOutreachEvidenceUnavailable: boolean;
+  firstOutreachEvidenceReason: string;
   firstOutreachAttachments: PersistedAttachment[];
   followUps: {
     date: string;
     comment: string;
+    evidenceUnavailable: boolean;
+    evidenceReason: string;
     attachments: PersistedAttachment[];
   }[];
 };
@@ -47,8 +61,28 @@ function toDatabaseDate(value: string): string | null {
   return value.length === 16 ? `${value}:00` : value;
 }
 
+export function timelineTimestamp(value: string): number {
+  if (!value) return Number.POSITIVE_INFINITY;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+}
+
 function sanitizeFileName(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/-+/g, "-");
+}
+
+function supabaseErrorMessage(context: string, error: unknown): string {
+  if (!error || typeof error !== "object") return context;
+  const details = error as { message?: string; details?: string; hint?: string; code?: string };
+  return [
+    context,
+    details.message,
+    details.details,
+    details.hint ? `Hint: ${details.hint}` : null,
+    details.code ? `Code: ${details.code}` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 async function signedUrl(storagePath: string): Promise<string | undefined> {
@@ -84,14 +118,20 @@ function rowToState(row: ResponseRow, fallbackFollowUps: Lead["followUps"]): Lea
   const first = touchpoints.find((t) => t.touchpoint_key === "first_outreach");
 
   return {
+    responseNotes: row.response_notes ?? "",
     firstOutreachDate: toInputValue(first?.occurred_at ?? null),
     firstOutreachMedium: first?.medium ?? "WhatsApp",
+    firstOutreachComment: first?.comment ?? "",
+    firstOutreachEvidenceUnavailable: first?.evidence_unavailable ?? false,
+    firstOutreachEvidenceReason: first?.evidence_unavailable_reason ?? "",
     firstOutreachAttachments: [],
     followUps: fallbackFollowUps.map((_, index) => {
       const touchpoint = touchpoints.find((t) => t.touchpoint_key === `follow_up_${index + 1}`);
       return {
         date: toInputValue(touchpoint?.occurred_at ?? null),
         comment: touchpoint?.comment ?? "",
+        evidenceUnavailable: touchpoint?.evidence_unavailable ?? false,
+        evidenceReason: touchpoint?.evidence_unavailable_reason ?? "",
         attachments: [],
       };
     }),
@@ -99,19 +139,7 @@ function rowToState(row: ResponseRow, fallbackFollowUps: Lead["followUps"]): Lea
 }
 
 export async function isCurrentUserAdmin(email: string | null | undefined): Promise<boolean> {
-  if (!email) return false;
-  const { data, error } = await supabase
-    .from("admin_users")
-    .select("id")
-    .eq("active", true)
-    .ilike("email", email)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[Supabase] Admin lookup failed", error);
-    return false;
-  }
-  return Boolean(data);
+  return email?.trim().toLowerCase() === ADMIN_EMAIL;
 }
 
 export async function loadLeadResponse(lead: Lead): Promise<LeadResponseState | null> {
@@ -147,12 +175,32 @@ export async function loadLeadResponse(lead: Lead): Promise<LeadResponseState | 
   return state;
 }
 
+export async function loadSubmittedLeadIds(): Promise<Set<string>> {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
+  if (!userData.user) return new Set();
+
+  const { data, error } = await supabase
+    .from("lead_responses")
+    .select("lead_id,status")
+    .eq("submitted_by", userData.user.id)
+    .in("status", ["submitted", "reviewed"]);
+
+  if (error) throw error;
+  return new Set((data ?? []).map((response) => response.lead_id));
+}
+
 async function uploadAttachment(
   responseId: string,
   touchpointKey: string,
   attachment: PersistedAttachment,
 ): Promise<PersistedAttachment> {
   if (!attachment.file) return attachment;
+  if (attachment.file.size > MAX_PROOF_FILE_SIZE_BYTES) {
+    throw new Error(
+      `${attachment.file.name} is ${formatFileSize(attachment.file.size)}. Maximum supporting document file size is ${formatFileSize(MAX_PROOF_FILE_SIZE_BYTES)}.`,
+    );
+  }
 
   const stamp = `${Date.now()}-${crypto.randomUUID()}`;
   const storagePath = `${responseId}/${touchpointKey}/${stamp}-${sanitizeFileName(attachment.file.name)}`;
@@ -195,6 +243,7 @@ export async function saveLeadResponse(
         stage_name: lead.stageName,
         class_type: lead.classType,
         source_name: lead.sourceName,
+        response_notes: state.responseNotes || null,
         submitted_by: user.id,
         submitted_by_email: user.email,
         status: "submitted",
@@ -205,7 +254,8 @@ export async function saveLeadResponse(
     .select("id")
     .single();
 
-  if (upsertError) throw upsertError;
+  if (upsertError)
+    throw new Error(supabaseErrorMessage("Response could not be saved.", upsertError));
   const responseId = response.id;
 
   const { data: existingFiles } = await supabase
@@ -233,7 +283,10 @@ export async function saveLeadResponse(
     .from("lead_response_touchpoints")
     .delete()
     .eq("response_id", responseId);
-  if (deleteError) throw deleteError;
+  if (deleteError)
+    throw new Error(
+      supabaseErrorMessage("Existing touchpoints could not be replaced.", deleteError),
+    );
 
   const touchpoints = [
     {
@@ -243,7 +296,9 @@ export async function saveLeadResponse(
       label: "First outreach",
       occurred_at: toDatabaseDate(state.firstOutreachDate),
       medium: state.firstOutreachMedium,
-      comment: null,
+      comment: state.firstOutreachComment || null,
+      evidence_unavailable: state.firstOutreachEvidenceUnavailable,
+      evidence_unavailable_reason: state.firstOutreachEvidenceReason || null,
     },
     ...followUps.map((followUp, index) => ({
       response_id: responseId,
@@ -253,11 +308,24 @@ export async function saveLeadResponse(
       occurred_at: toDatabaseDate(followUp.date),
       medium: null,
       comment: followUp.comment || null,
+      evidence_unavailable: followUp.evidenceUnavailable,
+      evidence_unavailable_reason: followUp.evidenceReason || null,
     })),
   ].filter((touchpoint, index) => {
-    if (index === 0) return Boolean(touchpoint.occurred_at || firstAttachments.length);
+    if (index === 0)
+      return Boolean(
+        touchpoint.occurred_at ||
+        touchpoint.comment ||
+        touchpoint.evidence_unavailable ||
+        firstAttachments.length,
+      );
     const followUp = followUps[index - 1];
-    return Boolean(touchpoint.occurred_at || touchpoint.comment || followUp.attachments.length);
+    return Boolean(
+      touchpoint.occurred_at ||
+      touchpoint.comment ||
+      touchpoint.evidence_unavailable ||
+      followUp.attachments.length,
+    );
   });
 
   const insertedTouchpoints =
@@ -267,7 +335,10 @@ export async function saveLeadResponse(
           .insert(touchpoints)
           .select("id,touchpoint_key")
       : { data: [], error: null };
-  if (insertedTouchpoints.error) throw insertedTouchpoints.error;
+  if (insertedTouchpoints.error)
+    throw new Error(
+      supabaseErrorMessage("Touchpoints could not be saved.", insertedTouchpoints.error),
+    );
 
   const touchpointIds = new Map(
     (insertedTouchpoints.data ?? []).map((touchpoint) => [
@@ -299,7 +370,8 @@ export async function saveLeadResponse(
 
   if (fileRows.length > 0) {
     const { error: fileError } = await supabase.from("lead_response_files").insert(fileRows);
-    if (fileError) throw fileError;
+    if (fileError)
+      throw new Error(supabaseErrorMessage("Supporting documents could not be saved.", fileError));
   }
 
   const stalePaths = (existingFiles ?? [])
@@ -310,8 +382,12 @@ export async function saveLeadResponse(
   }
 
   return {
+    responseNotes: state.responseNotes,
     firstOutreachDate: state.firstOutreachDate,
     firstOutreachMedium: state.firstOutreachMedium,
+    firstOutreachComment: state.firstOutreachComment,
+    firstOutreachEvidenceUnavailable: state.firstOutreachEvidenceUnavailable,
+    firstOutreachEvidenceReason: state.firstOutreachEvidenceReason,
     firstOutreachAttachments: firstAttachments,
     followUps,
   };
@@ -338,4 +414,31 @@ export async function loadAdminResponses(): Promise<AdminResponse[]> {
       ),
     })),
   );
+}
+
+export async function resetLeadResponse(responseId: string): Promise<void> {
+  const { data: files, error: fileLoadError } = await supabase
+    .from("lead_response_files")
+    .select("storage_path")
+    .eq("response_id", responseId);
+
+  if (fileLoadError)
+    throw new Error(
+      supabaseErrorMessage("Supporting documents could not be loaded for reset.", fileLoadError),
+    );
+
+  const storagePaths = (files ?? []).map((file) => file.storage_path).filter(Boolean);
+  if (storagePaths.length > 0) {
+    const { error: storageError } = await supabase.storage
+      .from(EVIDENCE_BUCKET)
+      .remove(storagePaths);
+    if (storageError)
+      throw new Error(
+        supabaseErrorMessage("Supporting documents could not be removed.", storageError),
+      );
+  }
+
+  const { error } = await supabase.from("lead_responses").delete().eq("id", responseId);
+
+  if (error) throw new Error(supabaseErrorMessage("Response could not be reset.", error));
 }

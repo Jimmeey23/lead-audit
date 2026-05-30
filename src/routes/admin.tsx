@@ -1,11 +1,25 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, FileText, LogOut, Paperclip, Search, ShieldCheck } from "lucide-react";
+import {
+  ArrowLeft,
+  FileText,
+  LogOut,
+  Paperclip,
+  RotateCcw,
+  Search,
+  ShieldCheck,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
-import { isCurrentUserAdmin, loadAdminResponses, type AdminResponse } from "@/lib/lead-responses";
+import {
+  ADMIN_EMAIL,
+  isCurrentUserAdmin,
+  loadAdminResponses,
+  resetLeadResponse,
+  type AdminResponse,
+} from "@/lib/lead-responses";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -13,7 +27,8 @@ export const Route = createFileRoute("/admin")({
       { title: "Admin Dashboard — Outreach Audit" },
       {
         name: "description",
-        content: "Admin-only dashboard for saved outreach audit responses and evidence.",
+        content:
+          "Admin-only dashboard for saved outreach audit responses and supporting documents.",
       },
     ],
   }),
@@ -39,6 +54,7 @@ function AdminDashboard() {
   const [responses, setResponses] = useState<AdminResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [center, setCenter] = useState("All");
 
@@ -86,6 +102,20 @@ function AdminDashboard() {
     };
   }, [admin]);
 
+  const resetResponse = async (responseId: string) => {
+    setResettingId(responseId);
+    setError(null);
+    try {
+      await resetLeadResponse(responseId);
+      setResponses((current) => current.filter((response) => response.id !== responseId));
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Response could not be reset.");
+    } finally {
+      setResettingId(null);
+    }
+  };
+
   const centers = useMemo(
     () => ["All", ...Array.from(new Set(responses.map((response) => response.center)))],
     [responses],
@@ -120,8 +150,7 @@ function AdminDashboard() {
           <ShieldCheck className="mx-auto size-10 text-muted-foreground" />
           <h1 className="mt-4 text-xl text-foreground">Admin access required</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Signed in as {email}. Add this email to the active Supabase admin list to view the
-            dashboard.
+            Signed in as {email}. This dashboard is limited to {ADMIN_EMAIL}.
           </p>
           <Button asChild className="mt-5">
             <Link to="/">Back to audit ledger</Link>
@@ -133,7 +162,7 @@ function AdminDashboard() {
 
   return (
     <div className="min-h-screen pb-20">
-      <header className="border-b border-border/60 bg-gradient-to-b from-primary/5 to-transparent">
+      <header className="border-b border-border/70 bg-gradient-to-b from-white via-primary/5 to-transparent">
         <div className="mx-auto max-w-7xl px-6 py-10 sm:px-10">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Button asChild variant="ghost" size="sm" className="gap-1.5">
@@ -156,15 +185,15 @@ function AdminDashboard() {
 
           <div className="mt-8 flex flex-wrap items-end justify-between gap-5">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/60 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+              <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-white/85 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground shadow-sm">
                 <ShieldCheck className="size-3 text-primary" /> Admin-only response dashboard
               </div>
               <h1 className="mt-4 text-4xl leading-tight text-foreground sm:text-5xl">
-                Central evidence and response review
+                Central supporting document and response review
               </h1>
               <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-                Review saved outreach validations, touchpoint notes, and uploaded evidence across
-                all centers.
+                Review saved outreach validations, touchpoint notes, and uploaded supporting
+                documents across all centers.
               </p>
             </div>
             <div className="text-right text-sm text-muted-foreground">
@@ -180,7 +209,7 @@ function AdminDashboard() {
                 value={q}
                 onChange={(event) => setQ(event.target.value)}
                 placeholder="Search by lead, submitter, center…"
-                className="bg-card/60 pl-9"
+                className="bg-white/90 pl-9 shadow-sm"
               />
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -192,7 +221,7 @@ function AdminDashboard() {
                   className={`rounded-full border px-3 py-1.5 text-xs transition ${
                     center === item
                       ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-card/40 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                      : "border-border bg-white/75 text-muted-foreground hover:border-primary/40 hover:text-foreground"
                   }`}
                 >
                   {item}
@@ -222,12 +251,24 @@ function AdminDashboard() {
         )}
 
         {filtered.map((response) => (
-          <section key={response.id} className="glass rounded-2xl border border-border/70 p-5">
+          <section
+            key={response.id}
+            className="glass rounded-2xl border border-border/70 p-5 shadow-lg shadow-slate-200/70"
+          >
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-2xl text-foreground">{response.lead_name}</h2>
                   <Badge variant="secondary">{response.center}</Badge>
+                  <Badge
+                    className={
+                      response.status === "draft"
+                        ? "border border-amber-200 bg-amber-50 text-amber-700"
+                        : "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                    }
+                  >
+                    {response.status}
+                  </Badge>
                   {response.stage_name && (
                     <Badge className="border border-primary/30 bg-primary/10 text-primary">
                       {response.stage_name}
@@ -240,10 +281,26 @@ function AdminDashboard() {
                   <span>Updated: {fmtDate(response.updated_at)}</span>
                   {response.associate && <span>Associate: {response.associate}</span>}
                 </div>
+                {response.response_notes && (
+                  <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+                    {response.response_notes}
+                  </p>
+                )}
               </div>
               <div className="text-right text-xs text-muted-foreground">
                 <div className="text-lg text-foreground">{response.touchpoints.length}</div>
                 Touchpoints
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={resettingId === response.id}
+                  onClick={() => resetResponse(response.id)}
+                  className="mt-3 h-8 gap-1.5 text-xs"
+                >
+                  <RotateCcw className="size-3.5" />
+                  {resettingId === response.id ? "Resetting..." : "Reset row"}
+                </Button>
               </div>
             </div>
 
@@ -251,7 +308,7 @@ function AdminDashboard() {
               {response.touchpoints.map((touchpoint) => (
                 <div
                   key={touchpoint.id}
-                  className="rounded-xl border border-border/70 bg-background/40 p-4"
+                  className="rounded-xl border border-border/70 bg-white p-4 shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -270,6 +327,14 @@ function AdminDashboard() {
                       {touchpoint.comment}
                     </p>
                   )}
+                  {touchpoint.evidence_unavailable && (
+                    <div className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      Supporting documents unavailable
+                      {touchpoint.evidence_unavailable_reason
+                        ? `: ${touchpoint.evidence_unavailable_reason}`
+                        : ""}
+                    </div>
+                  )}
                   {touchpoint.files.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-1.5">
                       {touchpoint.files.map((file) => (
@@ -286,9 +351,9 @@ function AdminDashboard() {
                       ))}
                     </div>
                   )}
-                  {touchpoint.files.length === 0 && (
+                  {touchpoint.files.length === 0 && !touchpoint.evidence_unavailable && (
                     <div className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <FileText className="size-3.5" /> No evidence files
+                      <FileText className="size-3.5" /> No supporting documents
                     </div>
                   )}
                 </div>
