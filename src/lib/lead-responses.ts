@@ -185,16 +185,7 @@ export async function loadLeadResponse(lead: Lead): Promise<LeadResponseState | 
 }
 
 export async function loadSubmittedLeadIds(): Promise<Set<string>> {
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw userError;
-  if (!userData.user) return new Set();
-
-  const { data, error } = await supabase
-    .from("lead_responses")
-    .select("lead_id,status")
-    .eq("submitted_by", userData.user.id)
-    .in("status", ["submitted", "reviewed"]);
-
+  const { data, error } = await supabase.rpc("submitted_lead_ids");
   if (error) throw error;
   return new Set((data ?? []).map((response) => response.lead_id));
 }

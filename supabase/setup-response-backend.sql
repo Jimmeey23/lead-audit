@@ -146,6 +146,20 @@ create index if not exists lead_response_files_response_id_idx on public.lead_re
 create index if not exists lead_response_files_touchpoint_id_idx on public.lead_response_files (touchpoint_id);
 create index if not exists lead_response_files_uploaded_by_idx on public.lead_response_files (uploaded_by);
 
+create or replace function public.submitted_lead_ids()
+returns table (lead_id text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select distinct r.lead_id
+  from public.lead_responses r
+  where r.status in ('submitted', 'reviewed');
+$$;
+
+grant execute on function public.submitted_lead_ids() to authenticated;
+
 drop trigger if exists set_admin_users_updated_at on public.admin_users;
 create trigger set_admin_users_updated_at
 before update on public.admin_users

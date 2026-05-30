@@ -181,7 +181,12 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      submitted_lead_ids: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          lead_id: string;
+        }[];
+      };
     };
     Enums: {
       [_ in never]: never;
