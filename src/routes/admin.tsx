@@ -369,6 +369,7 @@ function AdminDashboard() {
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                   <span>Lead ID: {response.lead_id}</span>
                   <span>Submitted by: {response.submitted_by_email}</span>
+                  <span>Created: {fmtDate(response.created_at)}</span>
                   <span>Updated: {fmtDate(response.updated_at)}</span>
                   {response.associate && <span>Associate: {response.associate}</span>}
                 </div>
@@ -408,10 +409,21 @@ function AdminDashboard() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-semibold text-foreground">{touchpoint.label}</h3>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {fmtDate(touchpoint.occurred_at)}
-                        {touchpoint.medium ? ` · ${touchpoint.medium}` : ""}
-                      </p>
+                      <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                        <p>
+                          Touchpoint date:{" "}
+                          <span className="font-medium text-foreground/80">
+                            {fmtDate(touchpoint.occurred_at)}
+                          </span>
+                        </p>
+                        <p>
+                          Saved:{" "}
+                          <span className="font-medium text-foreground/80">
+                            {fmtDate(touchpoint.created_at)}
+                          </span>
+                          {touchpoint.medium ? ` · Medium: ${touchpoint.medium}` : ""}
+                        </p>
+                      </div>
                     </div>
                     <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
                       {touchpoint.touchpoint_key.replace(/_/g, " ")}
