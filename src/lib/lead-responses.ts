@@ -442,6 +442,7 @@ export async function loadAdminResponses(): Promise<AdminResponse[]> {
   const { data, error } = await supabase
     .from("lead_responses")
     .select("*, lead_response_touchpoints(*, lead_response_files(*))")
+    .in("status", ["submitted", "reviewed"])
     .order("updated_at", { ascending: false });
 
   if (error) throw error;
@@ -462,28 +463,10 @@ export async function loadAdminResponses(): Promise<AdminResponse[]> {
 }
 
 export async function resetLeadResponse(responseId: string): Promise<void> {
-  const { data: files, error: fileLoadError } = await supabase
-    .from("lead_response_files")
-    .select("storage_path")
-    .eq("response_id", responseId);
-
-  if (fileLoadError)
-    throw new Error(
-      supabaseErrorMessage("Supporting documents could not be loaded for reset.", fileLoadError),
-    );
-
-  const storagePaths = (files ?? []).map((file) => file.storage_path).filter(Boolean);
-  if (storagePaths.length > 0) {
-    const { error: storageError } = await supabase.storage
-      .from(EVIDENCE_BUCKET)
-      .remove(storagePaths);
-    if (storageError)
-      throw new Error(
-        supabaseErrorMessage("Supporting documents could not be removed.", storageError),
-      );
-  }
-
-  const { error } = await supabase.from("lead_responses").delete().eq("id", responseId);
+  const { error } = await supabase
+    .from("lead_responses")
+    .update({ status: "draft", updated_at: new Date().toISOString() })
+    .eq("id", responseId);
 
   if (error) throw new Error(supabaseErrorMessage("Response could not be reset.", error));
 }

@@ -5,7 +5,6 @@ import { z } from "zod";
 import type { Database } from "@/integrations/supabase/types";
 
 const ADMIN_EMAIL = "jimmeey@physique57india.com";
-const EVIDENCE_BUCKET = "lead-evidence";
 
 const resetInput = z.object({
   responseId: z.string().uuid(),
@@ -109,25 +108,11 @@ export const resetLeadResponseWithNotification = createServerFn({ method: "POST"
       reason: data.reason,
     });
 
-    const { data: files, error: fileLoadError } = await supabase
-      .from("lead_response_files")
-      .select("storage_path")
-      .eq("response_id", data.responseId);
-    if (fileLoadError) throw new Error("Supporting documents could not be loaded for reset.");
-
-    const storagePaths = (files ?? []).map((file) => file.storage_path).filter(Boolean);
-    if (storagePaths.length > 0) {
-      const { error: storageError } = await supabase.storage
-        .from(EVIDENCE_BUCKET)
-        .remove(storagePaths);
-      if (storageError) throw new Error("Supporting documents could not be removed.");
-    }
-
-    const { error: deleteError } = await supabase
+    const { error: resetError } = await supabase
       .from("lead_responses")
-      .delete()
+      .update({ status: "draft", updated_at: new Date().toISOString() })
       .eq("id", data.responseId);
-    if (deleteError) throw new Error("Response could not be reset.");
+    if (resetError) throw new Error("Response could not be reset.");
 
     return { ok: true };
   });
