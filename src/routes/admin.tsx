@@ -12,6 +12,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { resetLeadResponseWithNotification } from "@/lib/api/admin.functions";
@@ -112,6 +122,8 @@ function AdminDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
+  const [resetCandidate, setResetCandidate] = useState<AdminResponse | null>(null);
+  const [resetReason, setResetReason] = useState("");
   const [q, setQ] = useState("");
   const [center, setCenter] = useState("All");
 
@@ -159,12 +171,9 @@ function AdminDashboard() {
     };
   }, [admin]);
 
-  const resetResponse = async (response: AdminResponse) => {
-    const reason = window.prompt(
-      `Enter the rejection reason for ${response.lead_name}. This will be emailed to ${response.submitted_by_email}.`,
-    );
-    if (reason === null) return;
-    const trimmedReason = reason.trim();
+  const resetResponse = async () => {
+    if (!resetCandidate) return;
+    const trimmedReason = resetReason.trim();
     if (trimmedReason.length < 8) {
       setError("Please enter a clear rejection reason before resetting the row.");
       return;
@@ -180,12 +189,14 @@ function AdminDashboard() {
 
       await resetLeadResponseWithNotification({
         data: {
-          responseId: response.id,
+          responseId: resetCandidate.id,
           reason: trimmedReason,
           accessToken,
         },
       });
-      setResponses((current) => current.filter((item) => item.id !== response.id));
+      setResponses((current) => current.filter((item) => item.id !== resetCandidate.id));
+      setResetCandidate(null);
+      setResetReason("");
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Response could not be reset.");
@@ -193,6 +204,8 @@ function AdminDashboard() {
       setResettingId(null);
     }
   };
+
+  const resetReasonIsValid = resetReason.trim().length >= 8;
 
   const centers = useMemo(
     () => ["All", ...Array.from(new Set(responses.map((response) => response.center)))],
@@ -373,7 +386,11 @@ function AdminDashboard() {
                   variant="outline"
                   size="sm"
                   disabled={resettingId === response.id}
-                  onClick={() => resetResponse(response)}
+                  onClick={() => {
+                    setError(null);
+                    setResetCandidate(response);
+                    setResetReason("");
+                  }}
                   className="mt-3 h-8 gap-1.5 text-xs"
                 >
                   <RotateCcw className="size-3.5" />
@@ -431,6 +448,66 @@ function AdminDashboard() {
           </section>
         ))}
       </main>
+
+      <Dialog
+        open={Boolean(resetCandidate)}
+        onOpenChange={(open) => {
+          if (open || resettingId) return;
+          setResetCandidate(null);
+          setResetReason("");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset row</DialogTitle>
+            <DialogDescription>
+              Enter the rejection reason. This is mandatory and will be emailed to{" "}
+              {resetCandidate?.submitted_by_email}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="reset-reason">
+              Rejection reason <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              id="reset-reason"
+              value={resetReason}
+              onChange={(event) => setResetReason(event.target.value)}
+              placeholder="Explain what needs to be corrected before this row can be submitted again."
+              className="min-h-28 resize-y"
+              disabled={Boolean(resettingId)}
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              Minimum 8 characters. The row will return to the ledger with its saved comments,
+              touchpoints, and supporting documents intact.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={Boolean(resettingId)}
+              onClick={() => {
+                setResetCandidate(null);
+                setResetReason("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={!resetReasonIsValid || Boolean(resettingId)}
+              onClick={resetResponse}
+            >
+              {resettingId ? "Resetting..." : "Reset and notify"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
