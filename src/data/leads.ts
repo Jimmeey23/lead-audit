@@ -26,6 +26,15 @@ export type Lead = {
   trialStatus: string;
   conversionStatus: string;
   retentionStatus: string;
+  sourceDocuments: LeadSourceDocument[];
+};
+
+export type LeadSourceDocument = {
+  name: string;
+  type: string;
+  size: number;
+  url: string;
+  touchpoint: string;
 };
 
 // Convert dd/mm/yyyy, dd.mm.yyyy, dd.mm.yy or yyyy-mm-dd to ISO datetime (yyyy-mm-ddTHH:MM).
@@ -43,7 +52,7 @@ function toISO(d: string, time = "09:00"): string {
 }
 
 const raw: Array<
-  Omit<Lead, "followUps" | "createdAt"> & {
+  Omit<Lead, "followUps" | "createdAt" | "sourceDocuments"> & {
     createdAt: string;
     fu: [string, string, string, string, string, string, string, string];
   }
@@ -829,6 +838,50 @@ function parseNumber(value: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+const SOURCE_DOCUMENTS_BY_LEAD_ID: Record<string, LeadSourceDocument[]> = {
+  "4743037": [
+    {
+      name: "Raveena Bhatt call recording - 18 May 2026",
+      type: "audio/mp4",
+      size: 303952,
+      url: "/source-documents/raveena-call-2026-05-18.m4a",
+      touchpoint: "First outreach",
+    },
+    {
+      name: "Raveena Bhatt call recording - 27 May 2026",
+      type: "audio/mp4",
+      size: 215619,
+      url: "/source-documents/raveena-call-2026-05-27.m4a",
+      touchpoint: "Follow-up 3",
+    },
+  ],
+  "4680214": [
+    {
+      name: "Dhwani Desai WhatsApp chat screenshot",
+      type: "application/pdf",
+      size: 251537,
+      url: "/source-documents/dhwani-whatsapp-chat.pdf",
+      touchpoint: "WhatsApp conversation",
+    },
+    {
+      name: "Dhwani Desai call recording - 06 May 2026",
+      type: "audio/mp4",
+      size: 9618272,
+      url: "/source-documents/dhwani-call-2026-05-06.m4a",
+      touchpoint: "First outreach call",
+    },
+  ],
+  "4607767": [
+    {
+      name: "Sonia Darira WhatsApp chat screenshot",
+      type: "application/pdf",
+      size: 602445,
+      url: "/source-documents/sonia-whatsapp-chat.pdf",
+      touchpoint: "WhatsApp conversation",
+    },
+  ],
+};
+
 function parseLeadRows(tsv: string): Lead[] {
   return tsv
     .trim()
@@ -865,6 +918,7 @@ function parseLeadRows(tsv: string): Lead[] {
         trialStatus: c[29],
         conversionStatus: c[30],
         retentionStatus: c[31],
+        sourceDocuments: SOURCE_DOCUMENTS_BY_LEAD_ID[c[0]] ?? [],
       };
     });
 }
@@ -876,6 +930,7 @@ const LEGACY_LEADS: Lead[] = raw.map((r) => {
   return {
     ...rest,
     createdAt: toISO(createdAt),
+    sourceDocuments: SOURCE_DOCUMENTS_BY_LEAD_ID[r.id] ?? [],
     followUps: [0, 1, 2, 3].map((i) => ({
       date: toISO(fu[i * 2]),
       comment: fu[i * 2 + 1] === "-" ? "" : fu[i * 2 + 1],

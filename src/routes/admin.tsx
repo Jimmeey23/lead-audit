@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   Download,
+  FileDown,
   FileText,
   LogOut,
   RotateCcw,
@@ -33,6 +34,7 @@ import {
   type AdminResponse,
   type PersistedAttachment,
 } from "@/lib/lead-responses";
+import { generateMemberAuditPDF, generateAllMemberPDFs } from "@/lib/generate-member-pdf";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -211,6 +213,10 @@ function AdminDashboard() {
     () => new Map(LEADS.map((lead) => [lead.id, lead.createdAt])),
     [],
   );
+  const sourceDocumentsByLeadId = useMemo(
+    () => new Map(LEADS.map((lead) => [lead.id, lead.sourceDocuments])),
+    [],
+  );
 
   const centers = useMemo(
     () => ["All", ...Array.from(new Set(responses.map((response) => response.center)))],
@@ -292,9 +298,21 @@ function AdminDashboard() {
                 documents across all centers.
               </p>
             </div>
-            <div className="text-right text-sm text-muted-foreground">
-              <div className="text-3xl text-foreground">{responses.length}</div>
-              Saved responses
+            <div className="flex flex-col items-end gap-3 text-sm text-muted-foreground">
+              <div className="text-right">
+                <div className="text-3xl text-foreground">{responses.length}</div>
+                Saved responses
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={responses.length === 0}
+                onClick={() => generateAllMemberPDFs(LEADS, responses)}
+                className="h-8 gap-1.5 text-xs"
+              >
+                <FileDown className="size-3.5" />
+                Download all PDF reports
+              </Button>
             </div>
           </div>
 
@@ -384,9 +402,24 @@ function AdminDashboard() {
                   </p>
                 )}
               </div>
-              <div className="text-right text-xs text-muted-foreground">
-                <div className="text-lg text-foreground">{response.touchpoints.length}</div>
-                Touchpoints
+              <div className="flex flex-col items-end gap-2 text-right text-xs text-muted-foreground">
+                <div>
+                  <div className="text-lg text-foreground">{response.touchpoints.length}</div>
+                  Touchpoints
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const lead = LEADS.find((l) => l.id === response.lead_id);
+                    if (lead) generateMemberAuditPDF(lead, response);
+                  }}
+                  className="h-8 gap-1.5 text-xs"
+                >
+                  <Download className="size-3.5" />
+                  PDF report
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
@@ -397,13 +430,35 @@ function AdminDashboard() {
                     setResetCandidate(response);
                     setResetReason("");
                   }}
-                  className="mt-3 h-8 gap-1.5 text-xs"
+                  className="h-8 gap-1.5 text-xs"
                 >
                   <RotateCcw className="size-3.5" />
                   {resettingId === response.id ? "Resetting..." : "Reset row"}
                 </Button>
               </div>
             </div>
+
+            {(sourceDocumentsByLeadId.get(response.lead_id)?.length ?? 0) > 0 && (
+              <div className="mt-5 rounded-xl border border-border/70 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Source documents</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Files attached directly to this lead from the source evidence set.
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
+                    {sourceDocumentsByLeadId.get(response.lead_id)?.length} file
+                    {sourceDocumentsByLeadId.get(response.lead_id)?.length === 1 ? "" : "s"}
+                  </Badge>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {sourceDocumentsByLeadId.get(response.lead_id)?.map((file) => (
+                    <DocumentPreview key={file.url} file={file} />
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="mt-5 grid gap-3 lg:grid-cols-2">
               {response.touchpoints.map((touchpoint) => (

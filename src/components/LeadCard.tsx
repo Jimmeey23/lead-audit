@@ -41,6 +41,7 @@ import {
   ChevronDown,
   NotepadText,
   CalendarClock,
+  Download,
 } from "lucide-react";
 
 const MEDIUMS = [
@@ -139,6 +140,44 @@ function AttachmentChip({ a, onRemove }: { a: PersistedAttachment; onRemove: () 
         <X className="size-3" />
       </button>
     </a>
+  );
+}
+
+function SourceDocumentPreview({ doc }: { doc: Lead["sourceDocuments"][number] }) {
+  return (
+    <figure className="overflow-hidden rounded-lg border border-border/70 bg-white shadow-sm">
+      {doc.type.startsWith("audio/") ? (
+        <div className="bg-slate-50 p-3">
+          <audio src={doc.url} controls className="w-full" preload="metadata" />
+        </div>
+      ) : doc.type === "application/pdf" ? (
+        <iframe title={doc.name} src={doc.url} className="h-72 w-full bg-slate-50" />
+      ) : (
+        <a
+          href={doc.url}
+          target="_blank"
+          rel="noreferrer"
+          className="flex min-h-32 flex-col items-center justify-center gap-2 bg-slate-50 p-4 text-center text-sm text-muted-foreground hover:text-primary"
+        >
+          <FileText className="size-6" />
+          Open document
+        </a>
+      )}
+      <figcaption className="flex items-center justify-between gap-3 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+        <span className="min-w-0 truncate">
+          {doc.name} · {doc.touchpoint} · {formatFileSize(doc.size)}
+        </span>
+        <a
+          href={doc.url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex shrink-0 items-center gap-1 text-primary hover:underline"
+        >
+          <Download className="size-3.5" />
+          Open
+        </a>
+      </figcaption>
+    </figure>
   );
 }
 
@@ -566,6 +605,28 @@ export function LeadCard({
                 ["Remarks", lead.remarks || NOT_AVAILABLE],
               ]}
             />
+          )}
+
+          {lead.sourceDocuments.length > 0 && (
+            <div className="rounded-lg border border-border/70 bg-white p-3 shadow-sm">
+              <div
+                className={`-mx-3 -mt-3 mb-3 flex items-center justify-between rounded-t-lg px-3 py-2.5 text-white ${accent.panel}`}
+              >
+                <div className="flex items-center gap-2">
+                  <FileText className="size-4 text-white/75" />
+                  <h3 className="text-base font-semibold text-white">Source documents</h3>
+                </div>
+                <Badge className="border border-white/20 bg-white/10 text-[10px] uppercase tracking-wider text-white">
+                  {lead.sourceDocuments.length} file
+                  {lead.sourceDocuments.length === 1 ? "" : "s"}
+                </Badge>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                {lead.sourceDocuments.map((doc) => (
+                  <SourceDocumentPreview key={doc.url} doc={doc} />
+                ))}
+              </div>
+            </div>
           )}
 
           <div className="rounded-lg border border-border/70 bg-white p-3 shadow-sm">
